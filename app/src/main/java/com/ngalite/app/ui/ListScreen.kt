@@ -12,16 +12,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,8 +62,19 @@ sealed interface ListUiState {
     data class Error(val message: String) : ListUiState
 }
 
+data class Forum(val fid: String, val name: String)
+
+private val FORUMS = listOf(
+    Forum("-7955747", "晴风村"),
+    Forum("-7", "网事杂谈"),
+    Forum("-447601", "二次元国家地理"),
+    Forum("422", "炉石传说"),
+    Forum("840", "游戏王大师决斗"),
+    Forum("510558", "洛克王国世界"),
+)
+
 class ListViewModel : ViewModel() {
-    private val fid = "-7955747"
+    private var fid = FORUMS.first().fid
     private val _state = MutableStateFlow<ListUiState>(ListUiState.Loading)
     val state: StateFlow<ListUiState> = _state
 
@@ -68,7 +83,17 @@ class ListViewModel : ViewModel() {
     private var isLoadingMore = false
     private val allTopics = mutableListOf<Topic>()
 
+    private val _currentForum = MutableStateFlow(FORUMS.first())
+    val currentForum: StateFlow<Forum> = _currentForum
+
     init { load() }
+
+    fun switchForum(forum: Forum) {
+        if (forum.fid == fid) return
+        fid = forum.fid
+        _currentForum.value = forum
+        load()
+    }
 
     fun load() {
         currentPage = 1
@@ -129,7 +154,9 @@ fun ListScreen(
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
+    val currentForum by vm.currentForum.collectAsState()
     var showLogin by remember { mutableStateOf(false) }
+    var showForumMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // 检测是否滚动到底部
@@ -152,7 +179,37 @@ fun ListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NgaLite") },
+                title = {
+                    TextButton(
+                        onClick = { showForumMenu = true },
+                    ) {
+                        Text(currentForum.name, color = MaterialTheme.colorScheme.onPrimary)
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = "切换板块",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                        DropdownMenu(
+                            expanded = showForumMenu,
+                            onDismissRequest = { showForumMenu = false }
+                        ) {
+                            FORUMS.forEach { forum ->
+                                DropdownMenuItem(
+                                    text = { Text(forum.name) },
+                                    onClick = {
+                                        showForumMenu = false
+                                        vm.switchForum(forum)
+                                    },
+                                    leadingIcon = {
+                                        if (forum.fid == currentForum.fid) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
                 actions = {
                     IconButton(onClick = { vm.load() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
