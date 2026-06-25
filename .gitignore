@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# 示例 HTML（参考用，不提交）
+帖子列表.html
+帖子详情.html
+帖子列表/
+帖子详情/
