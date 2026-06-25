@@ -20,8 +20,8 @@ object NgaApi {
     }
 
     /** 拉取版块帖子列表 HTML */
-    fun fetchThreadList(fid: String): String =
-        fetch("$BASE/thread.php?fid=$fid")
+    fun fetchThreadList(fid: String, page: Int = 1): String =
+        fetch("$BASE/thread.php?fid=$fid&page=$page")
 
     /** 拉取帖子详情 HTML */
     fun fetchThread(tid: String): String =

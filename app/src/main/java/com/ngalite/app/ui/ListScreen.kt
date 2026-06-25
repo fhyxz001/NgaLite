@@ -1,13 +1,16 @@
 package com.ngalite.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
@@ -21,7 +24,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,7 +49,12 @@ import kotlinx.coroutines.withContext
 
 sealed interface ListUiState {
     data object Loading : ListUiState
-    data class Success(val topics: List<Topic>) : ListUiState
+    data class Success(
+        val topics: List<Topic>,
+        val isLoadingMore: Boolean = false,
+        val hasMore: Boolean = true
+    ) : ListUiState
+
     data class Error(val message: String) : ListUiState
 }
 
@@ -53,16 +63,60 @@ class ListViewModel : ViewModel() {
     private val _state = MutableStateFlow<ListUiState>(ListUiState.Loading)
     val state: StateFlow<ListUiState> = _state
 
+    private var currentPage = 1
+    private var hasMore = true
+    private var isLoadingMore = false
+    private val allTopics = mutableListOf<Topic>()
+
     init { load() }
 
     fun load() {
+        currentPage = 1
+        hasMore = true
+        allTopics.clear()
         viewModelScope.launch {
             _state.value = ListUiState.Loading
             try {
-                val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid) }
-                _state.value = ListUiState.Success(NgaParser.parseTopicList(html))
+                val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
+                val topics = NgaParser.parseTopicList(html)
+                allTopics.addAll(topics)
+                hasMore = topics.isNotEmpty()
+                _state.value = ListUiState.Success(topics = allTopics.toList())
             } catch (e: Exception) {
                 _state.value = ListUiState.Error(e.message ?: "未知错误")
+            }
+        }
+    }
+
+    fun loadMore() {
+        if (isLoadingMore || !hasMore) return
+        isLoadingMore = true
+        val nextPage = currentPage + 1
+        viewModelScope.launch {
+            _state.value = ListUiState.Success(
+                topics = allTopics.toList(),
+                isLoadingMore = true,
+                hasMore = hasMore
+            )
+            try {
+                val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
+                val topics = NgaParser.parseTopicList(html)
+                allTopics.addAll(topics)
+                currentPage = nextPage
+                hasMore = topics.isNotEmpty()
+                isLoadingMore = false
+                _state.value = ListUiState.Success(
+                    topics = allTopics.toList(),
+                    isLoadingMore = false,
+                    hasMore = hasMore
+                )
+            } catch (e: Exception) {
+                isLoadingMore = false
+                _state.value = ListUiState.Success(
+                    topics = allTopics.toList(),
+                    isLoadingMore = false,
+                    hasMore = hasMore
+                )
             }
         }
     }
@@ -76,6 +130,24 @@ fun ListScreen(
 ) {
     val state by vm.state.collectAsState()
     var showLogin by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    // 检测是否滚动到底部
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalItems = listState.layoutInfo.totalItemsCount
+            lastVisibleItem >= totalItems - 3 && totalItems > 0
+        }
+    }
+
+    // 触发加载更多
+    val currentState = state
+    if (shouldLoadMore && currentState is ListUiState.Success && currentState.hasMore && !currentState.isLoadingMore) {
+        LaunchedEffect(Unit) {
+            vm.loadMore()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -111,11 +183,29 @@ fun ListScreen(
             }
 
             is ListUiState.Success -> LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(8.dp)
             ) {
                 items(s.topics, key = { it.tid }) { topic ->
                     TopicItem(topic) { onTopicClick(topic.tid) }
+                }
+
+                // 底部加载指示器
+                if (s.isLoadingMore) {
+                    item(key = "loading_more") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(8.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
                 }
             }
         }

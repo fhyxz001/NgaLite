@@ -31,19 +31,19 @@ object NgaParser {
             val author = row.selectFirst("[id^=postauthor]")?.text()?.trim() ?: ""
             val date = row.selectFirst("[id^=postdate]")?.text()?.trim() ?: ""
             val contentEl = row.selectFirst("[id^=postcontent]") ?: return@mapIndexedNotNull null
-            val content = htmlToText(contentEl.html())
+            val rawText = htmlToText(contentEl.html())
+            val contentNodes = UbbParser.parse(rawText)
             val floor = row.selectFirst("a[name^=l]")?.text()?.trim() ?: "#$index"
-            Post(floor, author, date, content)
+            Post(floor, author, date, contentNodes)
         }
     }
 
-    /** HTML 转纯文本：保留换行，剥离标签与实体 */
+    /** HTML 转纯文本：保留换行，剥离标签与实体（保留 UBB 标签） */
     private fun htmlToText(html: String): String {
         return html
             .replace("(?i)<br\\s*/?>".toRegex(), "\n")
             .replace("(?i)</p>".toRegex(), "\n\n")
             .replace("(?i)</div>".toRegex(), "\n")
-            .replace("(?i)<img[^>]*>".toRegex(), "[图]")
             .replace("(?i)<[^>]+>".toRegex(), "")
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")

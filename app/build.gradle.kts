@@ -48,5 +48,6 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
+    implementation(libs.coil.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

@@ -14,5 +14,15 @@ data class Post(
     val floor: String,
     val author: String,
     val date: String,
-    val content: String
+    val contentNodes: List<ContentNode>
 )
+
+/** 帖子正文中的内容节点 */
+sealed class ContentNode {
+    /** 纯文本节点 */
+    data class Text(val text: String) : ContentNode()
+    /** 图片节点 */
+    data class Image(val url: String) : ContentNode()
+    /** 引用块节点 */
+    data class Quote(val content: String) : ContentNode()
+}
