@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -49,8 +50,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -190,6 +194,26 @@ fun ListScreen(
         val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
         val match = regex.find(text) ?: return@LaunchedEffect
         clipboardTid = match.groupValues[1]
+    }
+
+    // 从后台切换回前台时再次检查剪贴板
+    val lastDetectedTid = remember { mutableStateOf<String?>(null) }
+    DisposableEffect(LocalLifecycleOwner.current) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: return@LifecycleEventObserver
+                val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
+                val match = regex.find(text) ?: return@LifecycleEventObserver
+                val tid = match.groupValues[1]
+                if (tid != lastDetectedTid.value) {
+                    lastDetectedTid.value = tid
+                    clipboardTid = tid
+                }
+            }
+        }
+        LocalLifecycleOwner.current.lifecycle.addObserver(observer)
+        onDispose { LocalLifecycleOwner.current.lifecycle.removeObserver(observer) }
     }
 
     // 检测是否滚动到底部
