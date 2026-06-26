@@ -1,5 +1,7 @@
 package com.ngalite.app.ui
 
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -93,6 +97,14 @@ class ListViewModel : ViewModel() {
 
     private val _currentForum = MutableStateFlow(FORUMS.first())
     val currentForum: StateFlow<Forum> = _currentForum
+
+    /** 本次会话是否已检查过剪贴板，避免导航返回后重复弹窗 */
+    var hasCheckedClipboard: Boolean = false
+        private set
+
+    fun markClipboardChecked() {
+        hasCheckedClipboard = true
+    }
 
     init { load() }
 
@@ -165,7 +177,20 @@ fun ListScreen(
     val currentForum by vm.currentForum.collectAsState()
     var showLogin by remember { mutableStateOf(false) }
     var showForumMenu by remember { mutableStateOf(false) }
+    var clipboardTid by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
+    // 进入应用时检查剪贴板是否包含 NGA 帖子链接
+    LaunchedEffect(Unit) {
+        if (vm.hasCheckedClipboard) return@LaunchedEffect
+        vm.markClipboardChecked()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: return@LaunchedEffect
+        val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
+        val match = regex.find(text) ?: return@LaunchedEffect
+        clipboardTid = match.groupValues[1]
+    }
 
     // 检测是否滚动到底部
     val shouldLoadMore by remember {
@@ -319,6 +344,23 @@ fun ListScreen(
 
     if (showLogin) {
         LoginDialog(onDismiss = { showLogin = false })
+    }
+
+    clipboardTid?.let { tid ->
+        AlertDialog(
+            onDismissRequest = { clipboardTid = null },
+            title = { Text("检测到剪贴板链接", style = MaterialTheme.typography.titleLarge) },
+            text = { Text("剪贴板中包含 NGA 帖子链接，是否立即查看？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    clipboardTid = null
+                    onTopicClick(tid)
+                }) { Text("我要看", fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { clipboardTid = null }) { Text("取消") }
+            }
+        )
     }
 }
 
