@@ -50,15 +50,25 @@ object UbbParser {
                     remaining = remaining.substring(imgEnd + 6)
                 }
                 "quote" -> {
-                    val quoteContent = remaining.substring(quoteStart + 7, quoteEnd)
-                    // 不处理嵌套 [quote]，直接将内部文本作为引用内容
-                    nodes.add(ContentNode.Quote(quoteContent))
+                    val rawQuote = remaining.substring(quoteStart + 7, quoteEnd)
+                    val cleaned = cleanQuoteMeta(rawQuote)
+                    nodes.add(ContentNode.Quote(cleaned))
                     remaining = remaining.substring(quoteEnd + 8)
                 }
             }
         }
 
         return nodes
+    }
+
+    /** 去除 NGA 引用开头的元信息标签 */
+    private fun cleanQuoteMeta(quote: String): String {
+        var cleaned = quote
+        // 去除 [pid=...]Reply[/pid]
+        cleaned = cleaned.replace(Regex("""\[pid=[^\]]*]Reply\[/pid]\s*"""), "")
+        // 去除 [b]Post by [uid=...]xxx[/uid] (yyyy-MM-dd HH:mm):[/b]
+        cleaned = cleaned.replace(Regex("""\[b]Post by \[uid=[^\]]*][^\[]*\[/uid]\s*\(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}\)\s*:\s*\[/b]\s*"""), "")
+        return cleaned.trim()
     }
 
     private data class TagCandidate(
