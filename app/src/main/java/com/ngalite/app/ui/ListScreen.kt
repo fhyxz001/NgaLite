@@ -198,7 +198,8 @@ fun ListScreen(
 
     // 从后台切换回前台时再次检查剪贴板
     val lastDetectedTid = remember { mutableStateOf<String?>(null) }
-    DisposableEffect(LocalLifecycleOwner.current) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -212,8 +213,8 @@ fun ListScreen(
                 }
             }
         }
-        LocalLifecycleOwner.current.lifecycle.addObserver(observer)
-        onDispose { LocalLifecycleOwner.current.lifecycle.removeObserver(observer) }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // 检测是否滚动到底部
