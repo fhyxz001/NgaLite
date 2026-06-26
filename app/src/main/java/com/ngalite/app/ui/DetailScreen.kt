@@ -96,7 +96,8 @@ class DetailViewModel : ViewModel() {
 
     private fun exportContent(): ExportManager.ExportContent? =
         (state.value as? DetailUiState.Success)?.let {
-            ExportManager.ExportContent(it.title, it.posts)
+            val sorted = it.posts.sortedByDescending { p -> p.likes.toIntOrNull() ?: 0 }.take(10)
+            ExportManager.ExportContent(it.title, sorted)
         }
 
     /** 复制 Markdown 到剪贴板 */
@@ -363,6 +364,14 @@ private fun PostItem(post: Post) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
+            // 点赞数
+            if (post.likes != "0") {
+                Text(
+                    "赞 ${post.likes}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
 
         // 渲染正文内容节点

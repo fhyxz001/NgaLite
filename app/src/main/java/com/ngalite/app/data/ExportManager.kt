@@ -79,6 +79,9 @@ object ExportManager {
 
     private fun buildPostHtml(post: Post): String {
         val contentHtml = post.contentNodes.joinToString("") { nodeToHtml(it) }
+        val likesHtml = if (post.likes != "0") {
+            """<span class="post-likes">赞 ${escapeHtml(post.likes)}</span>"""
+        } else ""
         return """
         |<div class="post">
         |    <div class="post-head">
@@ -87,6 +90,7 @@ object ExportManager {
         |            <span class="post-floor">${escapeHtml(post.floor)}</span>
         |        </div>
         |        <span class="post-date">${escapeHtml(post.date)}</span>
+        |        $likesHtml
         |    </div>
         |    <div class="post-content">$contentHtml</div>
         |</div>
@@ -114,8 +118,9 @@ object ExportManager {
         sb.append("# ").append(content.title).append("\n\n")
         sb.append("---\n\n")
         content.posts.forEach { post ->
+            val likesStr = if (post.likes != "0") " 赞 ${post.likes} " else " "
             sb.append("### ").append(post.floor).append(" ")
-                .append(post.author).append("（").append(post.date).append("）\n\n")
+                .append(post.author).append("（").append(post.date).append(likesStr).append("）\n\n")
             post.contentNodes.forEach { node ->
                 when (node) {
                     is ContentNode.Text -> {

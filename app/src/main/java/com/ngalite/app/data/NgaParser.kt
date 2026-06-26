@@ -42,8 +42,23 @@ object NgaParser {
             val rawText = htmlToText(contentEl.html())
             val contentNodes = UbbParser.parse(rawText)
             val floor = row.selectFirst("a[name^=l]")?.text()?.trim() ?: "#$index"
-            Post(floor, author, date, contentNodes)
+            val likes = parseLikes(row)
+            Post(floor, author, date, likes, contentNodes)
         }
+    }
+
+    /** 从楼层行解析点赞数 */
+    private fun parseLikes(row: org.jsoup.nodes.Element): String {
+        // 尝试匹配常见格式: "赞 (123)" 或 "已被赞 X 次" 或数字文本
+        row.select("[id^=likes_num]").firstOrNull()?.text()?.trim()?.let { num ->
+            val cleaned = num.replace(Regex("[^0-9-]"), "")
+            if (cleaned.isNotBlank()) return cleaned
+        }
+        // 尝试从文本中提取 "赞 (N)" 或 "赞 N"
+        val likeText = row.text()
+        val match = Regex("""赞\s*[（(]?\s*([+\-]?\d+)\s*[）)]?""").find(likeText)
+        if (match != null) return match.groupValues[1]
+        return "0"
     }
 
     /** HTML 转纯文本：保留换行，剥离标签与实体（保留 UBB 标签） */
