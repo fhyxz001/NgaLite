@@ -1,12 +1,17 @@
 package com.ngalite.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -248,25 +253,38 @@ fun DetailScreen(
                 Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
-            ) { CircularProgressIndicator() }
+            ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
 
             is DetailUiState.Error -> Column(
                 Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(s.message, color = MaterialTheme.colorScheme.error)
-                IconButton(onClick = { vm.load(tid) }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "重试")
+                Text(
+                    s.message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                TextButton(onClick = { vm.load(tid) }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("重试")
                 }
             }
 
             is DetailUiState.Success -> LazyColumn(
-                Modifier.fillMaxSize().padding(padding)
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
             ) {
                 items(s.posts) { post ->
                     PostItem(post)
-                    HorizontalDivider()
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp
+                    )
                 }
             }
         }
@@ -310,21 +328,40 @@ fun DetailScreen(
 
 @Composable
 private fun PostItem(post: Post) {
-    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
         androidx.compose.foundation.layout.Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 楼层徽标
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    post.floor,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
             Text(
-                "${post.floor} ${post.author}",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
+                post.author,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
             Text(
                 post.date,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary
+                color = MaterialTheme.colorScheme.outline
             )
         }
 
@@ -336,7 +373,8 @@ private fun PostItem(post: Post) {
                         Text(
                             node.text,
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 8.dp)
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 10.dp)
                         )
                     }
                 }
@@ -348,35 +386,44 @@ private fun PostItem(post: Post) {
                         contentDescription = "图片",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { showFull = !showFull },
                         contentScale = if (showFull) ContentScale.Fit else ContentScale.FillWidth
                     )
                 }
 
                 is ContentNode.Quote -> {
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(IntrinsicSize.Max)
                             .padding(top = 12.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(12.dp)
                     ) {
-                        Text(
-                            "引用",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Medium
+                        // 左侧强调色竖条
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary)
                         )
-                        Text(
-                            node.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                "引用",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                node.content,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        }
                     }
                 }
             }

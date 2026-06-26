@@ -1,8 +1,11 @@
 package com.ngalite.app.ui
 
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -12,7 +15,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import com.ngalite.app.data.CookieStore
 
 /** Cookie 登录对话框：粘贴 Cookie 字符串保存 */
@@ -22,7 +27,7 @@ fun LoginDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cookie 登录") },
+        title = { Text("Cookie 登录", style = MaterialTheme.typography.titleLarge) },
         text = {
             OutlinedTextField(
                 value = cookie,
@@ -33,12 +38,18 @@ fun LoginDialog(onDismiss: () -> Unit) {
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
             )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "在浏览器登录 NGA 后，从开发者工具或请求头中复制 Cookie 粘贴到此处。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         },
         confirmButton = {
             TextButton(onClick = {
                 CookieStore.save(cookie)
                 onDismiss()
-            }) { Text("保存") }
+            }) { Text("保存", fontWeight = FontWeight.SemiBold) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
