@@ -61,13 +61,26 @@ object UbbParser {
         return nodes
     }
 
-    /** 去除 NGA 引用开头的元信息标签 */
+    /** 去除 NGA 引用开头的元信息标签，简化可读文本 */
     private fun cleanQuoteMeta(quote: String): String {
         var cleaned = quote
-        // 去除 [pid=...]Reply[/pid]
-        cleaned = cleaned.replace(Regex("""\[pid=[^\]]*]Reply\[/pid]\s*"""), "")
-        // 去除 [b]Post by [uid=...]xxx[/uid] (yyyy-MM-dd HH:mm):[/b]
-        cleaned = cleaned.replace(Regex("""\[b]Post by \[uid=[^\]]*][^\[]*\[/uid]\s*\(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}\)\s*:\s*\[/b]\s*"""), "")
+        // 1. 去除 [pid=...]Reply[/pid]（无阅读价值）
+        cleaned = cleaned.replace(Regex("""\[pid=[^\]]*]Reply\[/pid]"""), "")
+        // 2. 处理 [b]...[/b] 块：剥去内部 UBB 标签，去除日期和引用前缀，保留可读文字
+        cleaned = cleaned.replace(Regex("""\[b](.*?)\[/b]""")) { match ->
+            match.groupValues[1]
+                .replace(Regex("""\[/?[a-z]+\w*(?:=[^\]]*)?]"""), "")  // 剥去 UBB 标签
+                .replace(Regex("""\s*\(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}\)"""), "") // 去除日期
+                .replace(Regex("""\s*:\s*$"""), "") // 去除末尾冒号
+                .replace(Regex("""(?i)\bPost by\b"""), "") // 去除 "Post by" 标记
+                .replace(Regex("""(?i)\bReply to\b"""), "回复") // "Reply to" → "回复"
+                .trim()
+        }
+        // 3. 去除剩余孤立的 UBB 标签
+        cleaned = cleaned.replace(Regex("""\[/?[a-z]+\w*(?:=[^\]]*)?]"""), "")
+        // 4. 规范化空白（去除多余空格和空行）
+        cleaned = cleaned.replace(Regex("""[ \t]+"""), " ")
+            .replace(Regex("""\n{3,}"""), "\n\n")
         return cleaned.trim()
     }
 
