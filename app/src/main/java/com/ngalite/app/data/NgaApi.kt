@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 object NgaApi {
 
     private const val BASE = "https://bbs.nga.cn"
-    private const val UA =
+    internal const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
     private val client by lazy {

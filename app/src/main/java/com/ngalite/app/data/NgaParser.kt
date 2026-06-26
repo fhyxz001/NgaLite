@@ -7,6 +7,14 @@ object NgaParser {
 
     private val TID_REGEX = Regex("""tid=(\d+)""")
 
+    /** 解析帖子标题（来自 <title>，去掉 " NGA玩家社区 P1" 后缀） */
+    fun parseThreadTitle(html: String): String {
+        val doc = Jsoup.parse(html)
+        val raw = doc.title().trim()
+        // 形如 "爸妈老年散财碎碎念 NGA玩家社区 P1"
+        return raw.substringBefore(" NGA").trim().ifBlank { "NGA帖子" }
+    }
+
     /** 解析帖子列表 */
     fun parseTopicList(html: String): List<Topic> {
         val doc = Jsoup.parse(html)

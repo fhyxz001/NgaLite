@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 适配手机屏幕 16:9 展示：宽度跟随设备，移动端字号 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            color-scheme: light;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #f3f4f6;
+            color: #1f2937;
+            font-family: 'PingFang SC', 'Helvetica Neue', STHeiti, 'Microsoft Yahei', sans-serif;
+        }
+        body {
+            padding: 12px 12px 24px;
+        }
+        .page {
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 16px 14px 22px;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+        }
+        .title {
+            margin: 0 0 14px;
+            font-size: 20px;
+            line-height: 1.4;
+            font-weight: 700;
+            color: #111827;
+        }
+        .post {
+            padding: 14px 0;
+            border-top: 1px solid #e5e7eb;
+        }
+        .post:first-of-type {
+            border-top: none;
+            padding-top: 4px;
+        }
+        .post-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .post-head-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .post-author {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2563eb;
+        }
+        .post-floor {
+            font-size: 12px;
+            color: #1d4ed8;
+            background: #eff6ff;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .post-date {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .post-content {
+            font-size: 16px;
+            line-height: 1.8;
+            color: #1f2937;
+            word-break: break-word;
+        }
+        .post-content p {
+            margin: 0 0 0.8em;
+        }
+        .post-content p:last-child {
+            margin-bottom: 0;
+        }
+        .post-content img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 8px;
+            background: #f3f4f6;
+        }
+        .post-content blockquote {
+            margin: 10px 0;
+            padding: 10px 12px;
+            border-left: 3px solid #93c5fd;
+            background: #f8fafc;
+            border-radius: 6px;
+            color: #475569;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .post-content blockquote .quote-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .export-footer {
+            margin-top: 18px;
+            padding-top: 14px;
+            border-top: 1px solid #e5e7eb;
+        }
+        .export-footer-line {
+            font-size: 12px;
+            line-height: 1.6;
+            color: #6b7280;
+        }
+        .export-credit-brand {
+            color: #3b82f6;
+            font-weight: 700;
+        }
+        .export-credit {
+            margin: 6px 0 0;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #9ca3af;
+            word-break: break-all;
+        }
+        .is-hidden {
+            display: none !important;
+        }
+        @page {
+            margin: 8mm;
+        }
+        @media print {
+            html, body {
+                background: #ffffff;
+            }
+            body {
+                padding: 0;
+            }
+            .page {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            .post {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <h1 class="title">{{title}}</h1>
+        <div class="posts">{{postsHtml}}</div>
+        <footer class="export-footer">
+            <div class="export-footer-line">{{exportedDate}}</div>
+            <p class="{{appAttributionClass}}">
+                本帖使用<span class="export-credit-brand">NgaLite</span>导出，开源轻量 NGA 第三方客户端。
+            </p>
+        </footer>
+    </main>
+</body>
+</html>
