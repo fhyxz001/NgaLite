@@ -5,6 +5,9 @@ object UbbParser {
 
     private const val IMG_BASE = "https://img.nga.178.com/attachments/"
 
+    /** 匹配 [s:ac:blink] / [s:ac2:xxx] 格式的表情标签 */
+    private val EMOJI_REGEX = Regex("""\[s:(ac2?):([^\]]+)]""")
+
     /** 解析正文，返回 ContentNode 列表 */
     fun parse(content: String): List<ContentNode> {
         val nodes = mutableListOf<ContentNode>()
@@ -16,6 +19,7 @@ object UbbParser {
             val imgEnd = remaining.indexOf("[/img]", ignoreCase = true)
             val quoteStart = remaining.indexOf("[quote]", ignoreCase = true)
             val quoteEnd = remaining.indexOf("[/quote]", ignoreCase = true)
+            val emojiMatch = EMOJI_REGEX.find(remaining)
 
             // 找出最先出现的标签
             val candidates = mutableListOf<TagCandidate>()
@@ -25,6 +29,9 @@ object UbbParser {
             }
             if (quoteStart != -1 && quoteEnd != -1 && quoteStart < quoteEnd) {
                 candidates.add(TagCandidate("quote", quoteStart, quoteEnd + 8))
+            }
+            if (emojiMatch != null) {
+                candidates.add(TagCandidate("emoji", emojiMatch.range.first, emojiMatch.range.last + 1))
             }
 
             if (candidates.isEmpty()) {
@@ -54,6 +61,11 @@ object UbbParser {
                     val cleaned = cleanQuoteMeta(rawQuote)
                     nodes.add(ContentNode.Quote(cleaned))
                     remaining = remaining.substring(quoteEnd + 8)
+                }
+                "emoji" -> {
+                    val match = emojiMatch!!
+                    nodes.add(ContentNode.Emoji(match.groupValues[1], match.groupValues[2]))
+                    remaining = remaining.substring(match.range.last + 1)
                 }
             }
         }

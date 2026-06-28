@@ -109,6 +109,9 @@ object ExportManager {
             val body = escapeHtml(node.content).replace("\n", "<br>")
             "<blockquote><span class=\"quote-label\">引用</span>$body</blockquote>"
         }
+        is ContentNode.Emoji -> {
+            "<img src=\"https://img.nga.178.com/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" class=\"emoji\" />"
+        }
     }
 
     // ---- Markdown ----
@@ -136,6 +139,9 @@ object ExportManager {
                             sb.append("> ").append(line).append("\n")
                         }
                         sb.append("\n")
+                    }
+                    is ContentNode.Emoji -> {
+                        sb.append("[s:").append(node.folder).append(":").append(node.name).append("]")
                     }
                 }
             }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -360,69 +361,155 @@ private fun PostItem(post: Post) {
         }
 
         // 渲染正文内容节点
-        post.contentNodes.forEach { node ->
-            when (node) {
-                is ContentNode.Text -> {
-                    if (node.text.isNotBlank()) {
-                        Text(
-                            node.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 10.dp)
-                        )
-                    }
-                }
+        PostContent(post.contentNodes)
+    }
+}
 
-                is ContentNode.Image -> {
-                    var showFull by remember { mutableStateOf(false) }
-                    AsyncImage(
-                        model = node.url,
-                        contentDescription = "图片",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showFull = !showFull },
-                        contentScale = if (showFull) ContentScale.Fit else ContentScale.FillWidth
+/**
+ * 渲染正文内容节点：连续的文本与表情合并为内联富文本，图片/引用单独成块。
+ */
+@Composable
+private fun PostContent(nodes: List<ContentNode>) {
+    var i = 0
+    while (i < nodes.size) {
+        val node = nodes[i]
+        if (node is ContentNode.Text || node is ContentNode.Emoji) {
+            // 收集连续的文本和表情节点，一起渲染为内联富文本
+            val group = mutableListOf<ContentNode>()
+            while (i < nodes.size && (nodes[i] is ContentNode.Text || nodes[i] is ContentNode.Emoji)) {
+                group.add(nodes[i])
+                i++
+            }
+            InlineRichText(group)
+        } else if (node is ContentNode.Image) {
+            var showFull by remember { mutableStateOf(false) }
+            AsyncImage(
+                model = node.url,
+                contentDescription = "图片",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showFull = !showFull },
+                contentScale = if (showFull) ContentScale.Fit else ContentScale.FillWidth
+            )
+            i++
+        } else if (node is ContentNode.Quote) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max)
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                // 左侧强调色竖条
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        "引用",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        node.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
+            }
+            i++
+        } else {
+            i++
+        }
+    }
+}
 
-                is ContentNode.Quote -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Max)
-                            .padding(top = 12.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        // 左侧强调色竖条
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                "引用",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                node.content,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                        }
-                    }
+/**
+ * 将连续的文本和表情节点渲染为内联富文本，表情图片从 assets 加载。
+ */
+@Composable
+private fun InlineRichText(nodes: List<ContentNode>) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val emojiCache = remember { mutableMapOf<String, Boolean>() }
+
+    // 收集表情信息：(id, folder, name)
+    val slots = mutableListOf<Triple<String, String, String>>()
+    var counter = 0
+
+    val annotated = buildAnnotatedString {
+        nodes.forEach { node ->
+            when (node) {
+                is ContentNode.Text -> append(node.text)
+                is ContentNode.Emoji -> {
+                    val id = "emoji_${counter++}"
+                    slots.add(Triple(id, node.folder, node.name))
+                    appendInlineContent(id, "[${node.name}]")
                 }
+                else -> {}
             }
         }
     }
+
+    // 过滤纯空白内容
+    val hasContent = nodes.any { node ->
+        when (node) {
+            is ContentNode.Text -> node.text.isNotBlank()
+            is ContentNode.Emoji -> true
+            else -> false
+        }
+    }
+    if (!hasContent) return
+
+    // 构建内联表情映射，检查 assets 中是否存在对应图片
+    val inlineContent = slots.associate { (id, folder, name) ->
+        val key = "$folder/$name"
+        val exists = emojiCache.getOrPut(key) {
+            try {
+                context.assets.open("$key.png").close()
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+        id to InlineTextContent(
+            Placeholder(
+                width = 22.sp,
+                height = 22.sp,
+                placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
+            )
+        ) {
+            if (exists) {
+                AsyncImage(
+                    model = "file:///android_asset/$key.png",
+                    contentDescription = name,
+                    modifier = Modifier.size(22.dp)
+                )
+            } else {
+                Text(
+                    "[s:$folder:$name]",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+
+    Text(
+        text = annotated,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        inlineContent = inlineContent,
+        modifier = Modifier.padding(top = 10.dp)
+    )
 }
 
 @Composable
