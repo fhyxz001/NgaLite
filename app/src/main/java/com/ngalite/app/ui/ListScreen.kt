@@ -2,6 +2,7 @@ package com.ngalite.app.ui
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
