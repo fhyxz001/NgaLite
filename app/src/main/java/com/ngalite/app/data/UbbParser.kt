@@ -8,10 +8,16 @@ object UbbParser {
     /** 匹配 [s:ac:blink] / [s:ac2:xxx] 格式的表情标签 */
     private val EMOJI_REGEX = Regex("""\[s:(ac2?):([^\]]+)]""")
 
+    /** 匹配回复元信息：[b]Reply to [pid=...]Reply[/pid] Post by [uid=...]用户名[/uid] (日期)[/b] */
+    private val REPLY_META_REGEX = Regex(
+        """\[b]\s*Reply to\s*\[pid=[^\]]*]Reply\[/pid]\s*Post by\s*\[uid=[^\]]*](.*?)\[/uid]\s*\([^)]*\)\s*\[/b]""",
+        RegexOption.IGNORE_CASE
+    )
+
     /** 解析正文，返回 ContentNode 列表 */
     fun parse(content: String): List<ContentNode> {
         val nodes = mutableListOf<ContentNode>()
-        var remaining = content
+        var remaining = preprocessReplyMeta(content)
 
         while (remaining.isNotEmpty()) {
             // 找下一个标签
@@ -35,17 +41,23 @@ object UbbParser {
             }
 
             if (candidates.isEmpty()) {
-                // 没有更多标签，剩余部分作为文本
-                nodes.add(ContentNode.Text(remaining))
+                // 没有更多标签，剩余部分作为文本（清理残留 UBB 标签）
+                val textRest = stripUbbTags(remaining)
+                if (textRest.isNotBlank()) {
+                    nodes.add(ContentNode.Text(textRest))
+                }
                 break
             }
 
             // 选最先出现的标签
             val earliest = candidates.minBy { it.start }
 
-            // 标签前的文本
+            // 标签前的文本（清理残留 UBB 标签）
             if (earliest.start > 0) {
-                nodes.add(ContentNode.Text(remaining.substring(0, earliest.start)))
+                val textBefore = stripUbbTags(remaining.substring(0, earliest.start))
+                if (textBefore.isNotBlank()) {
+                    nodes.add(ContentNode.Text(textBefore))
+                }
             }
 
             when (earliest.type) {
@@ -71,6 +83,19 @@ object UbbParser {
         }
 
         return nodes
+    }
+
+    /** 预处理回复元信息，将 [b]Reply to ... Post by ... (date)[/b] 格式化为 "回复 用户名。" */
+    private fun preprocessReplyMeta(content: String): String {
+        return REPLY_META_REGEX.replace(content) { match ->
+            val username = match.groupValues[1].trim()
+            "回复 $username。"
+        }
+    }
+
+    /** 去除文本中的 UBB 标签（保留标签内文字内容），不影响 [img]/[quote]/[s:ac:xxx] 等已解析标签 */
+    private fun stripUbbTags(text: String): String {
+        return text.replace(Regex("""\[/?[a-z]+\w*(?:=[^\]]*)?]"""), "")
     }
 
     /** 去除 NGA 引用开头的元信息标签，简化可读文本 */

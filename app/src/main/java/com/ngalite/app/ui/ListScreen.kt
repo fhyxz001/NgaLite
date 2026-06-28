@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +32,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,9 +60,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.rememberCoroutineScope
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Topic
+import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -185,6 +189,53 @@ fun ListScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
+    // ---- 检查更新相关状态 ----
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateManager.UpdateResult?>(null) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    /** 获取当前应用版本名 */
+    fun currentVersionName(): String = try {
+        val pm = context.packageManager
+        pm.getPackageInfo(context.packageName, 0).versionName ?: ""
+    } catch (e: PackageManager.NameNotFoundException) {
+        ""
+    }
+
+    /** 触发检查更新 */
+    fun triggerCheckUpdate() {
+        if (isCheckingUpdate) return
+        isCheckingUpdate = true
+        scope.launch {
+            val result = UpdateManager.checkUpdate(currentVersionName())
+            updateResult = result
+            isCheckingUpdate = false
+        }
+    }
+
+    /** 确认更新后开始下载 */
+    fun startDownload(url: String) {
+        updateResult = null
+        isDownloading = true
+        downloadProgress = 0
+        downloadError = null
+        scope.launch {
+            try {
+                val file = UpdateManager.downloadApk(context, url) { progress ->
+                    downloadProgress = progress
+                }
+                isDownloading = false
+                UpdateManager.installApk(context, file)
+            } catch (e: Exception) {
+                isDownloading = false
+                downloadError = e.message ?: "下载失败，挂梯子试试"
+            }
+        }
+    }
+
     // 进入应用时检查剪贴板是否包含 NGA 帖子链接
     LaunchedEffect(Unit) {
         if (vm.hasCheckedClipboard) return@LaunchedEffect
@@ -281,6 +332,17 @@ fun ListScreen(
                 actions = {
                     IconButton(onClick = { vm.load() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    }
+                    IconButton(onClick = { triggerCheckUpdate() }, enabled = !isCheckingUpdate) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Icon(Icons.Default.SystemUpdateAlt, contentDescription = "检查更新")
+                        }
                     }
                     IconButton(onClick = { showLogin = true }) {
                         Icon(Icons.Default.Login, contentDescription = "登录")
@@ -384,6 +446,93 @@ fun ListScreen(
             },
             dismissButton = {
                 TextButton(onClick = { clipboardTid = null }) { Text("取消") }
+            }
+        )
+    }
+
+    // ---- 检查更新结果对话框 ----
+    updateResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = { updateResult = null },
+            title = { Text("检查更新", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Text(
+                        result.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (result.hasUpdate) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (result.hasUpdate) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "当前版本：v${currentVersionName()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Text(
+                            "最新版本：v${result.latestVersion}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (result.hasUpdate && result.downloadUrl != null) {
+                    TextButton(onClick = {
+                        val url = result.downloadUrl!!
+                        startDownload(url)
+                    }) { Text("立即更新", fontWeight = FontWeight.SemiBold) }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateResult = null }) { Text("关闭") }
+            }
+        )
+    }
+
+    // ---- 下载进度对话框 ----
+    if (isDownloading) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("正在下载更新", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    LinearProgressIndicator(
+                        progress = { downloadProgress / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "$downloadProgress%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+
+    // ---- 下载失败提示对话框 ----
+    downloadError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { downloadError = null },
+            title = { Text("下载失败", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Text(
+                    error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { downloadError = null }) { Text("知道了") }
             }
         )
     }
