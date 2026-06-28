@@ -15,11 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -51,9 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -438,29 +435,13 @@ private fun PostContent(nodes: List<ContentNode>) {
 
 /**
  * 将连续的文本和表情节点渲染为内联富文本，表情图片从 assets 加载。
+ * 使用 FlowRow 实现文本与表情图片的行内混排。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InlineRichText(nodes: List<ContentNode>) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val emojiCache = remember { mutableMapOf<String, Boolean>() }
-
-    // 收集表情信息：(id, folder, name)
-    val slots = mutableListOf<Triple<String, String, String>>()
-    var counter = 0
-
-    val annotated = buildAnnotatedString {
-        nodes.forEach { node ->
-            when (node) {
-                is ContentNode.Text -> append(node.text)
-                is ContentNode.Emoji -> {
-                    val id = "emoji_${counter++}"
-                    slots.add(Triple(id, node.folder, node.name))
-                    appendInlineContent(id, "[${node.name}]")
-                }
-                else -> {}
-            }
-        }
-    }
 
     // 过滤纯空白内容
     val hasContent = nodes.any { node ->
@@ -472,47 +453,51 @@ private fun InlineRichText(nodes: List<ContentNode>) {
     }
     if (!hasContent) return
 
-    // 构建内联表情映射，检查 assets 中是否存在对应图片
-    val inlineContent = slots.associate { (id, folder, name) ->
-        val key = "$folder/$name"
-        val exists = emojiCache.getOrPut(key) {
-            try {
-                context.assets.open("$key.png").close()
-                true
-            } catch (e: Exception) {
-                false
-            }
-        }
-        id to InlineTextContent(
-            Placeholder(
-                width = 22.sp,
-                height = 22.sp,
-                placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-            )
-        ) {
-            if (exists) {
-                AsyncImage(
-                    model = "file:///android_asset/$key.png",
-                    contentDescription = name,
-                    modifier = Modifier.size(22.dp)
-                )
-            } else {
-                Text(
-                    "[s:$folder:$name]",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.padding(top = 10.dp),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        nodes.forEach { node ->
+            when (node) {
+                is ContentNode.Text -> {
+                    if (node.text.isNotBlank()) {
+                        Text(
+                            node.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                is ContentNode.Emoji -> {
+                    val key = "${node.folder}/${node.name}"
+                    val exists = emojiCache.getOrPut(key) {
+                        try {
+                            context.assets.open("$key.png").close()
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                    if (exists) {
+                        AsyncImage(
+                            model = "file:///android_asset/$key.png",
+                            contentDescription = node.name,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .padding(horizontal = 1.dp)
+                        )
+                    } else {
+                        Text(
+                            "[s:${node.folder}:${node.name}]",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+                else -> {}
             }
         }
     }
-
-    Text(
-        text = annotated,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        inlineContent = inlineContent,
-        modifier = Modifier.padding(top = 10.dp)
-    )
 }
 
 @Composable
