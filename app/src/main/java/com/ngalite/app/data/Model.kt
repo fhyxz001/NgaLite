@@ -26,6 +26,6 @@ sealed class ContentNode {
     data class Image(val url: String) : ContentNode()
     /** 引用块节点 */
     data class Quote(val content: String) : ContentNode()
-    /** 表情包图片（匹配 assets 中 ac/a2 文件夹下的同名 png） */
+    /** 表情包图片（匹配 assets 中 ac/a2/ng/pst/dt/pg 文件夹下的同名 png） */
     data class Emoji(val folder: String, val name: String) : ContentNode()
 }

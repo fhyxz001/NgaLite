@@ -5,8 +5,8 @@ object UbbParser {
 
     private const val IMG_BASE = "https://img.nga.178.com/attachments/"
 
-    /** 匹配 [s:ac:blink] / [s:a2:xxx] 格式的表情标签 */
-    private val EMOJI_REGEX = Regex("""\[s:(ac|a2):([^\]]+)]""")
+    /** 匹配 [s:ac:blink] / [s:a2:xxx] / [s:ng:xxx] / [s:pst:xxx] / [s:dt:xxx] / [s:pg:xxx] 格式的表情标签 */
+    private val EMOJI_REGEX = Regex("""\[s:(ac|a2|ng|pst|dt|pg):([^\]]+)]""")
 
     /** 匹配回复元信息：[b]Reply to [pid=...]Reply[/pid] Post by [uid=...]用户名[/uid] (日期)[/b] */
     private val REPLY_META_REGEX = Regex(
