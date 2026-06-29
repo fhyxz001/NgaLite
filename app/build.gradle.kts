@@ -31,6 +31,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = "NgaLite-v${variant.versionName}.apk"
+        }
+    }
 }
 
 dependencies {
