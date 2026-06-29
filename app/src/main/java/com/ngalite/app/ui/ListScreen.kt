@@ -3,6 +3,8 @@ package com.ngalite.app.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,9 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -342,11 +343,13 @@ fun ListScreen(
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Icon(Icons.Default.SystemUpdateAlt, contentDescription = "检查更新")
+                            val updateBitmap = remember { BitmapFactory.decodeStream(context.assets.open("update.png")) }
+                            Image(bitmap = updateBitmap.asImageBitmap(), contentDescription = "检查更新", modifier = Modifier.size(24.dp))
                         }
                     }
                     IconButton(onClick = { showLogin = true }) {
-                        Icon(Icons.Default.Login, contentDescription = "登录")
+                        val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
+                        Image(bitmap = cookieBitmap.asImageBitmap(), contentDescription = "Cookie登录", modifier = Modifier.size(24.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
