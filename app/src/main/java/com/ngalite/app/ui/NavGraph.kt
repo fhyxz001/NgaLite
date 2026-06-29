@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 
 object Routes {
     const val LIST = "list"
+    const val SETTINGS = "settings"
     const val DETAIL = "detail/{tid}"
     fun detail(tid: String) = "detail/$tid"
 }
@@ -18,7 +19,13 @@ fun NavGraph() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {
-            ListScreen(onTopicClick = { tid -> nav.navigate(Routes.detail(tid)) })
+            ListScreen(
+                onTopicClick = { tid -> nav.navigate(Routes.detail(tid)) },
+                onSettingsClick = { nav.navigate(Routes.SETTINGS) }
+            )
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { nav.popBackStack() })
         }
         composable(
             route = Routes.DETAIL,

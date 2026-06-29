@@ -1,8 +1,9 @@
 package com.ngalite.app.ui
 
+import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +23,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,7 +31,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -45,7 +44,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +58,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Topic
-import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +81,10 @@ private val FORUMS = listOf(
     Forum("-7955747", "晴风村"),
     Forum("-7", "网事杂谈"),
     Forum("-447601", "二次元国家地理"),
+    Forum("-60252908", "旮旯game"),
+    Forum("498", "二手交易"),
+    Forum("428", "手综"),
+    Forum("-202020", "程序员职业交流"),
     Forum("422", "炉石传说"),
     Forum("840", "游戏王大师决斗"),
     Forum("510558", "洛克王国世界"),
@@ -167,59 +168,25 @@ class ListViewModel : ViewModel() {
 @Composable
 fun ListScreen(
     onTopicClick: (String) -> Unit,
+    onSettingsClick: () -> Unit,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
-    var showLogin by remember { mutableStateOf(false) }
     var showForumMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
-    // ---- 检查更新相关状态 ----
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var updateResult by remember { mutableStateOf<UpdateManager.UpdateResult?>(null) }
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableStateOf(0) }
-    var downloadError by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    /** 获取当前应用版本名 */
-    fun currentVersionName(): String = try {
-        val pm = context.packageManager
-        pm.getPackageInfo(context.packageName, 0).versionName ?: ""
-    } catch (e: PackageManager.NameNotFoundException) {
-        ""
-    }
-
-    /** 触发检查更新 */
-    fun triggerCheckUpdate() {
-        if (isCheckingUpdate) return
-        isCheckingUpdate = true
-        scope.launch {
-            val result = UpdateManager.checkUpdate(currentVersionName())
-            updateResult = result
-            isCheckingUpdate = false
-        }
-    }
-
-    /** 确认更新后开始下载 */
-    fun startDownload(url: String) {
-        updateResult = null
-        isDownloading = true
-        downloadProgress = 0
-        downloadError = null
-        scope.launch {
-            try {
-                val file = UpdateManager.downloadApk(context, url) { progress ->
-                    downloadProgress = progress
-                }
-                isDownloading = false
-                UpdateManager.installApk(context, file)
-            } catch (e: Exception) {
-                isDownloading = false
-                downloadError = e.message ?: "下载失败，挂梯子试试"
-            }
+    /** 读取剪贴板中的 NGA 帖子链接并跳转 */
+    fun readClipboardAndOpen() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+        val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
+        val match = regex.find(text)
+        if (match != null) {
+            onTopicClick(match.groupValues[1])
+        } else {
+            Toast.makeText(context, "剪贴板中没有 NGA 帖子链接", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -285,21 +252,13 @@ fun ListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { triggerCheckUpdate() }, enabled = !isCheckingUpdate) {
-                        if (isCheckingUpdate) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            val updateBitmap = remember { BitmapFactory.decodeStream(context.assets.open("update.png")) }
-                            Image(bitmap = updateBitmap.asImageBitmap(), contentDescription = "检查更新", modifier = Modifier.size(24.dp))
-                        }
+                    IconButton(onClick = { readClipboardAndOpen() }) {
+                        val inBitmap = remember { BitmapFactory.decodeStream(context.assets.open("in.png")) }
+                        Image(bitmap = inBitmap.asImageBitmap(), contentDescription = "读取剪贴板链接", modifier = Modifier.size(24.dp))
                     }
-                    IconButton(onClick = { showLogin = true }) {
-                        val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
-                        Image(bitmap = cookieBitmap.asImageBitmap(), contentDescription = "Cookie登录", modifier = Modifier.size(24.dp))
+                    IconButton(onClick = onSettingsClick) {
+                        val settingsBitmap = remember { BitmapFactory.decodeStream(context.assets.open("set.png")) }
+                        Image(bitmap = settingsBitmap.asImageBitmap(), contentDescription = "设置", modifier = Modifier.size(24.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -380,114 +339,25 @@ fun ListScreen(
             }
         }
     }
-
-    if (showLogin) {
-        LoginDialog(onDismiss = { showLogin = false })
-    }
-
-    // ---- 检查更新结果对话框 ----
-    updateResult?.let { result ->
-        AlertDialog(
-            onDismissRequest = { updateResult = null },
-            title = { Text("检查更新", style = MaterialTheme.typography.titleLarge) },
-            text = {
-                Column {
-                    Text(
-                        result.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (result.hasUpdate) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface
-                    )
-                    if (result.hasUpdate) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "当前版本：v${currentVersionName()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            "最新版本：v${result.latestVersion}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                if (result.hasUpdate && result.downloadUrl != null) {
-                    TextButton(onClick = {
-                        val url = result.downloadUrl!!
-                        startDownload(url)
-                    }) { Text("立即更新", fontWeight = FontWeight.SemiBold) }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateResult = null }) { Text("关闭") }
-            }
-        )
-    }
-
-    // ---- 下载进度对话框 ----
-    if (isDownloading) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("正在下载更新", style = MaterialTheme.typography.titleLarge) },
-            text = {
-                Column {
-                    LinearProgressIndicator(
-                        progress = { downloadProgress / 100f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "$downloadProgress%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            },
-            confirmButton = {},
-            dismissButton = {}
-        )
-    }
-
-    // ---- 下载失败提示对话框 ----
-    downloadError?.let { error ->
-        AlertDialog(
-            onDismissRequest = { downloadError = null },
-            title = { Text("下载失败", style = MaterialTheme.typography.titleLarge) },
-            text = {
-                Text(
-                    error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { downloadError = null }) { Text("知道了") }
-            }
-        )
-    }
 }
 
 @Composable
 private fun TopicItem(topic: Topic, onClick: () -> Unit) {
-    val replies = topic.replies.toIntOrNull() ?: 0
-    // 热度分级：回复数越高配色越醒目
-    val isHot = replies >= 100
-    val isWarm = replies in 30..99
-    val badgeColor = when {
-        isHot -> MaterialTheme.colorScheme.error
-        isWarm -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.secondary
-    }
-    val badgeContainer = when {
-        isHot -> MaterialTheme.colorScheme.errorContainer
-        isWarm -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer
+    // 缓存热度计算结果，避免滚动时重复计算
+    val colorScheme = MaterialTheme.colorScheme
+    val (replies, badgeColor, badgeContainer) = remember(topic.replies, colorScheme) {
+        val count = topic.replies.toIntOrNull() ?: 0
+        val color = when {
+            count >= 100 -> colorScheme.error
+            count >= 30 -> colorScheme.tertiary
+            else -> colorScheme.secondary
+        }
+        val container = when {
+            count >= 100 -> colorScheme.errorContainer
+            count >= 30 -> colorScheme.tertiaryContainer
+            else -> colorScheme.secondaryContainer
+        }
+        Triple(count, color, container)
     }
 
     Card(

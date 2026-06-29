@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "com.ngalite.app-debug-53:/xml_file_paths.xml.flat",
+        "source": "com.ngalite.app-main-55:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.ngalite.app-debug-53:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.ngalite.app-main-55:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.ngalite.app-debug-53:/drawable_ic_launcher_foreground.png.flat",
+        "source": "com.ngalite.app-main-55:/drawable/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.ngalite.app-debug-53:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.ngalite.app-main-55:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    }
+]

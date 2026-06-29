@@ -1,0 +1,8 @@
+com.ngalite.app-pngs-0 D:\PROJECT\NgaLite\app\build\generated\res\pngs\debug
+com.ngalite.app-updated_navigation_xml-1 D:\PROJECT\NgaLite\app\build\generated\updated_navigation_xml\debug
+com.ngalite.app-packageDebugResources-2 D:\PROJECT\NgaLite\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.ngalite.app-packageDebugResources-3 D:\PROJECT\NgaLite\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.ngalite.app-debug-4 D:\PROJECT\NgaLite\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.ngalite.app-debug-5 D:\PROJECT\NgaLite\app\src\debug\res
+com.ngalite.app-main-6 D:\PROJECT\NgaLite\app\src\main\res
+gradleHome-0 C:\Users\hexb\.gradle

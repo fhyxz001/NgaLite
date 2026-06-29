@@ -2,5 +2,11 @@
 <resources>
     <color name="ic_launcher_background">#591804</color>
     <string name="app_name">NgaLite</string>
-    <style name="Theme.NgaLite" parent="android:Theme.Material.Light.NoActionBar"/>
+    <style name="Theme.NgaLite" parent="android:Theme.Material.Light.NoActionBar">
+        
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+        
+        <item name="android:windowDisablePreview">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
 </resources>

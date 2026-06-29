@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,14 +51,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Dimension
+import coil.size.Size
 import com.ngalite.app.data.ContentNode
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.ExportManager
@@ -81,7 +88,10 @@ class DetailViewModel : ViewModel() {
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state
 
+    private var currentTid: String = ""
+
     fun load(tid: String) {
+        currentTid = tid
         viewModelScope.launch {
             _state.value = DetailUiState.Loading
             try {
@@ -95,10 +105,13 @@ class DetailViewModel : ViewModel() {
         }
     }
 
+    private fun postUrl(): String =
+        if (currentTid.isBlank()) "" else "https://bbs.nga.cn/read.php?tid=$currentTid"
+
     private fun exportContent(): ExportManager.ExportContent? =
         (state.value as? DetailUiState.Success)?.let {
             val sorted = it.posts.sortedByDescending { p -> p.likes.toIntOrNull() ?: 0 }.take(10)
-            ExportManager.ExportContent(it.title, sorted)
+            ExportManager.ExportContent(it.title, sorted, postUrl())
         }
 
     /** 复制 Markdown 到剪贴板 */
@@ -201,6 +214,7 @@ fun DetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -281,8 +295,8 @@ fun DetailScreen(
                     .padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
             ) {
-                items(s.posts) { post ->
-                    PostItem(post)
+                itemsIndexed(s.posts, key = { index, _ -> index }) { _, post ->
+                    PostItem(post) { fullScreenImageUrl = it }
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
                         thickness = 0.5.dp
@@ -326,10 +340,33 @@ fun DetailScreen(
             }
         )
     }
+
+    // 全屏图片查看
+    fullScreenImageUrl?.let { url ->
+        Dialog(
+            onDismissRequest = { fullScreenImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
+                    .clickable { fullScreenImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "放大图片",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
 }
 
 @Composable
-private fun PostItem(post: Post) {
+private fun PostItem(post: Post, onImageClick: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
         androidx.compose.foundation.layout.Row(
             modifier = Modifier.fillMaxWidth(),
@@ -361,7 +398,7 @@ private fun PostItem(post: Post) {
         }
 
         // 渲染正文内容节点
-        PostContent(post.contentNodes)
+        PostContent(post.contentNodes, onImageClick)
     }
 }
 
@@ -369,7 +406,14 @@ private fun PostItem(post: Post) {
  * 渲染正文内容节点：连续的文本与表情合并为内联富文本，图片/引用单独成块。
  */
 @Composable
-private fun PostContent(nodes: List<ContentNode>) {
+private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val screenDensity = density.density
+    val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val screenWidthPx = remember(screenDensity, screenWidthDp) {
+        (screenWidthDp * screenDensity).toInt()
+    }
     var i = 0
     while (i < nodes.size) {
         val node = nodes[i]
@@ -382,16 +426,23 @@ private fun PostContent(nodes: List<ContentNode>) {
             }
             InlineRichText(group)
         } else if (node is ContentNode.Image) {
-            var showFull by remember { mutableStateOf(false) }
+            // 记忆 ImageRequest，避免每次重组都重新构建
+            val request = remember(node.url, screenWidthPx) {
+                ImageRequest.Builder(context)
+                    .data(node.url)
+                    .size(Size(Dimension.Pixels(screenWidthPx), Dimension.Undefined))
+                    .build()
+            }
             AsyncImage(
-                model = node.url,
+                model = request,
                 contentDescription = "图片",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 10.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { showFull = !showFull },
-                contentScale = if (showFull) ContentScale.Fit else ContentScale.FillWidth
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onImageClick(node.url) },
+                contentScale = ContentScale.FillWidth
             )
             i++
         } else if (node is ContentNode.Quote) {
@@ -483,8 +534,9 @@ private fun InlineRichText(nodes: List<ContentNode>) {
                             model = "file:///android_asset/$key.png",
                             contentDescription = node.name,
                             modifier = Modifier
-                                .size(22.dp)
-                                .padding(horizontal = 1.dp)
+                                .size(34.dp)
+                                .padding(horizontal = 1.dp),
+                            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         )
                     } else {
                         Text(

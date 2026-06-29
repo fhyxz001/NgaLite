@@ -1,3 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.NgaLite" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.NgaLite" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 启动窗口背景：与主题色一致，避免冷启动白屏 -->
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+        <!-- 禁用启动窗口预览淡入，减少感知启动时间 -->
+        <item name="android:windowDisablePreview">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
 </resources>

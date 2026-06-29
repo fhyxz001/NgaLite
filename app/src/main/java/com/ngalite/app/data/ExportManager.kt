@@ -16,12 +16,16 @@ import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Base64
@@ -54,7 +58,7 @@ object ExportManager {
     }
 
     /** 导出内容快照 */
-    data class ExportContent(val title: String, val posts: List<Post>)
+    data class ExportContent(val title: String, val posts: List<Post>, val url: String = "")
 
     // ---- HTML 构建 ----
 
@@ -70,11 +74,47 @@ object ExportManager {
         val exportedDate = "导出日期：" +
             SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val attributionClass = if (includeAttribution) "export-credit" else "export-credit is-hidden"
+        val qrCodeHtml = buildQrCodeHtml(content.url)
         return template
             .replace("{{title}}", escapeHtml(content.title))
             .replace("{{postsHtml}}", postsHtml)
             .replace("{{exportedDate}}", escapeHtml(exportedDate))
             .replace("{{appAttributionClass}}", attributionClass)
+            .replace("{{qrCodeHtml}}", qrCodeHtml)
+    }
+
+    /** 生成帖子链接的二维码 HTML，微信可长按扫码识别 */
+    private fun buildQrCodeHtml(url: String): String {
+        if (url.isBlank()) return ""
+        val dataUrl = try {
+            generateQrCodeDataUrl(url, sizePx = 200)
+        } catch (e: Exception) {
+            return ""
+        }
+        return """
+            <div class="export-qrcode">
+                <img src="$dataUrl" alt="扫码访问原帖" />
+                <span class="export-qrcode-tip">扫码查看原帖</span>
+            </div>
+        """.trimIndent()
+    }
+
+    /** 使用 ZXing 生成二维码，并返回 PNG base64 data URL */
+    private fun generateQrCodeDataUrl(content: String, sizePx: Int): String {
+        val writer = MultiFormatWriter()
+        val bitMatrix: BitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        for (x in 0 until sizePx) {
+            for (y in 0 until sizePx) {
+                bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
+            }
+        }
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        val bytes = stream.toByteArray()
+        bitmap.recycle()
+        val base64 = Base64.getEncoder().encodeToString(bytes)
+        return "data:image/png;base64,$base64"
     }
 
     private fun buildPostHtml(post: Post): String {

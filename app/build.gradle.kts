@@ -11,8 +11,8 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.45"
+        versionCode = 8
+        versionName = "1.46"
     }
 
     buildTypes {
@@ -31,12 +31,10 @@ android {
     buildFeatures {
         compose = true
     }
+}
 
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            output.outputFileName = "NgaLite-v${variant.versionName}.apk"
-        }
-    }
+base {
+    archivesName = "NgaLite-v${android.defaultConfig.versionName}"
 }
 
 dependencies {
@@ -55,5 +53,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.jsoup)
     implementation(libs.coil.compose)
+    implementation(libs.zxing.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
