@@ -55,6 +55,7 @@ fun SettingsScreen(
     onLoginClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    var showLogin by remember { mutableStateOf(false) }
     var showCookieDialog by remember { mutableStateOf(false) }
     var cookieInput by remember { mutableStateOf(CookieStore.get()) }
     var logged by remember { mutableStateOf(CookieStore.isLogin()) }
@@ -197,7 +198,7 @@ fun SettingsScreen(
 
             // 登录 NGA 账号
             Card(
-                onClick = { onLoginClick() },
+                onClick = { showLogin = true },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -227,7 +228,7 @@ fun SettingsScreen(
                                 val name = loggedAccount
                                 if (name.isNotBlank()) "已登录：$name" else "已登录"
                             } else {
-                                "网页登录，自动抓取 Cookie"
+                                "账号密码登录，自动处理验证码"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = if (logged) MaterialTheme.colorScheme.primary
@@ -256,6 +257,13 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showLogin) {
+        LoginDialog(onDismiss = {
+            showLogin = false
+            refreshLoginState()
+        })
     }
 
     if (showCookieDialog) {
