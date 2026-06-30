@@ -162,7 +162,7 @@ object NgaApi {
             }
             else -> null
         } ?: throw LoginException(err("未找到 data[3]"))
-        val uid = Regex(""""uid"\s*:\s*"?(\d+)"""").find(item3)?.groupValues?.lastOrNull()
+        val uid = Regex(""""uid"\s*:\s*"?(\d+)""").find(item3)?.groupValues?.lastOrNull()
             ?: throw LoginException("未获取到 uid")
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(item3)?.groupValues?.lastOrNull()
             ?: throw LoginException("未获取到 token")
