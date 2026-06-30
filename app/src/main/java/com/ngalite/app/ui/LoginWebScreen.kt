@@ -1,6 +1,7 @@
 package com.ngalite.app.ui
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,14 +34,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.NgaApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.nio.charset.Charset
+import java.util.concurrent.TimeUnit
 
 private const val LOGIN_URL = "https://bbs.nga.cn/nuke.php?__lib=login&__act=account&login"
+private const val BASE_URL = "https://bbs.nga.cn/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginWebScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
     fun captureCookies(): Boolean {
         val cookies = CookieManager.getInstance().getCookie(LOGIN_URL) ?: ""
@@ -48,6 +60,20 @@ fun LoginWebScreen(onBack: () -> Unit) {
         val uid = Regex("ngaPassportUid=(\\d+)").find(cookies)?.groupValues?.lastOrNull().orEmpty()
         if (uid.isNotBlank()) CookieStore.saveAccountName("UID:$uid")
         return true
+    }
+
+    fun loadPage(wv: WebView) {
+        isLoading = true
+        loadError = null
+        scope.launch {
+            try {
+                val html = withContext(Dispatchers.IO) { fetchLoginPageHtml() }
+                wv.loadDataWithBaseURL(BASE_URL, html, "text/html", "GBK", null)
+            } catch (e: Exception) {
+                loadError = "页面加载失败：${e.message}"
+                isLoading = false
+            }
+        }
     }
 
     Scaffold(
@@ -82,13 +108,40 @@ fun LoginWebScreen(onBack: () -> Unit) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding), contentAlignment = Alignment.Center) {
             AndroidView(
-                factory = { ctx -> createWebView(ctx) { isLoading = it } },
+                factory = { ctx ->
+                    createWebView(ctx) { isLoading = it }.also { wv -> loadPage(wv) }
+                },
                 modifier = Modifier.fillMaxSize()
             )
-            if (isLoading) {
+            if (isLoading && loadError == null) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
+            loadError?.let { msg ->
+                TextButton(onClick = {
+                    // 需要 WebView 引用才能重试，但这里拿不到
+                    // 用户可点返回重新进入
+                }) {
+                    Text("$msg\n请返回后重试", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
+    }
+}
+
+private val pageClient = OkHttpClient.Builder()
+    .connectTimeout(15, TimeUnit.SECONDS)
+    .readTimeout(20, TimeUnit.SECONDS)
+    .build()
+
+private fun fetchLoginPageHtml(): String {
+    val req = Request.Builder()
+        .url(LOGIN_URL)
+        .header("User-Agent", NgaApi.UA)
+        .build()
+    pageClient.newCall(req).execute().use { resp ->
+        if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
+        val bytes = resp.body?.bytes() ?: throw RuntimeException("响应为空")
+        return String(bytes, Charset.forName("GBK"))
     }
 }
 
@@ -104,7 +157,6 @@ private fun createWebView(
             userAgentString = NgaApi.UA
             useWideViewPort = true
             loadWithOverviewMode = true
-            defaultTextEncodingName = "GBK"
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             allowFileAccess = false
             allowContentAccess = true
@@ -121,20 +173,15 @@ private fun createWebView(
                 super.onPageFinished(view, url)
                 onLoadingChanged(false)
             }
-
-            override fun onReceivedError(
-                view: WebView?,
-                errorCode: Int,
-                description: String?,
-                failingUrl: String?
-            ) {
-                super.onReceivedError(view, errorCode, description, failingUrl)
-                onLoadingChanged(false)
-            }
         }
 
-        webChromeClient = WebChromeClient()
-
-        loadUrl(LOGIN_URL)
+        webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
+                msg?.let {
+                    Log.d("LoginWebView", "[${it.messageLevel()}] ${it.message()} — ${it.sourceId()}:${it.lineNumber()}")
+                }
+                return super.onConsoleMessage(msg)
+            }
+        }
     }
 }
