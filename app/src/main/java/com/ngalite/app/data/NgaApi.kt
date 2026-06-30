@@ -88,12 +88,13 @@ object NgaApi {
             .build()
 
         val loginResp = loginClient.newCall(loginReq).execute()
-        val body = loginResp.body?.string().orEmpty()
+        val bodyBytes = loginResp.body?.bytes().orEmpty()
+        val body = String(bodyBytes, Charset.forName("GBK"))
         val httpCode = loginResp.code
         loginResp.close()
         if (httpCode !in 200..299) throw LoginException("网络错误 HTTP $httpCode")
 
-        val (uid, token, username) = parseLoginResult(body)
+        val (uid, token, username) = parseLoginResult(body, bodyBytes)
 
         // 2. 用 uid/token 设置会话 cookie（捕获 Set-Cookie）
         val setForm = FormBody.Builder(null)
@@ -128,19 +129,24 @@ object NgaApi {
      * 注意 NGA 登录响应实际为 GBK 编码（Content-Type: text/javascript; charset=GBK），
      * 调用方需按 GBK 解码后再传入。
      */
-    private fun parseLoginResult(body: String): Triple<String, String, String> {
-        val json = extractJson(body) ?: throw LoginException("登录响应解析失败")
+    private fun parseLoginResult(body: String, rawBytes: ByteArray): Triple<String, String, String> {
+        fun err(detail: String): String {
+            val preview = body.take(500)
+            val hex = rawBytes.take(200).joinToString(" ") { "%02x".format(it) }
+            return "$detail\n响应预览: $preview\nHex: $hex"
+        }
+        val json = extractJson(body) ?: throw LoginException(err("登录响应解析失败"))
         // error 字段：网页端用 y.error[0]/y.error[1] 读取，既可能是数组 ["信息","码"]，
         // 也可能是对象 {"0":"信息","1":"码"}（实测验证码场景即为对象）。两种都要识别。
         val errorMsg = extractError(json)
         if (errorMsg != null) throw LoginException(errorMsg)
         // data = [ ... ]，用括号配平提取，避免数组内嵌 ] 被非贪婪正则提前截断
         val dataKeyIdx = json.indexOf(""""data"""")
-        if (dataKeyIdx < 0) throw LoginException("登录响应解析失败")
+        if (dataKeyIdx < 0) throw LoginException(err("未找到 data 字段"))
         val dataArr = extractArrayAfter(json, dataKeyIdx)
-            ?: throw LoginException("登录响应解析失败")
+            ?: throw LoginException(err("data 数组解析失败"))
         // data[3] = {"uid":xxxxx,"token":"xxxxx","username":"...", ...}，本身是个对象
-        val item3 = extractNthObject(dataArr, 3) ?: throw LoginException("登录响应解析失败")
+        val item3 = extractNthObject(dataArr, 3) ?: throw LoginException(err("未找到 data[3]"))
         val uid = Regex(""""uid"\s*:\s*"?(\d+)"""").find(item3)?.groupValues?.lastOrNull()
             ?: throw LoginException("未获取到 uid")
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(item3)?.groupValues?.lastOrNull()

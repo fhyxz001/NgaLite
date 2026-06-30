@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 object Routes {
     const val LIST = "list"
     const val SETTINGS = "settings"
+    const val LOGIN_WEB = "login_web"
     const val DETAIL = "detail/{tid}"
     fun detail(tid: String) = "detail/$tid"
 }
@@ -25,7 +26,13 @@ fun NavGraph() {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(onBack = { nav.popBackStack() })
+            SettingsScreen(
+                onBack = { nav.popBackStack() },
+                onLoginClick = { nav.navigate(Routes.LOGIN_WEB) }
+            )
+        }
+        composable(Routes.LOGIN_WEB) {
+            LoginWebScreen(onBack = { nav.popBackStack() })
         }
         composable(
             route = Routes.DETAIL,

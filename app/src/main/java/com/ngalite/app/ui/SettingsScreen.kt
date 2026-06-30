@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,18 +52,23 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onLoginClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    var showLogin by remember { mutableStateOf(false) }
-    // 登录态展示：进入页面与登录对话框关闭后刷新
-    var loggedAccount by remember { mutableStateOf(CookieStore.getAccountName()) }
+    var showCookieDialog by remember { mutableStateOf(false) }
+    var cookieInput by remember { mutableStateOf(CookieStore.get()) }
     var logged by remember { mutableStateOf(CookieStore.isLogin()) }
+    var loggedAccount by remember { mutableStateOf(CookieStore.getAccountName()) }
+
+    fun refreshLoginState() {
+        logged = CookieStore.isLogin()
+        loggedAccount = CookieStore.getAccountName()
+    }
 
     /** 退出登录：清空 Cookie 与账号信息 */
     fun logout() {
         CookieStore.clear()
-        logged = false
-        loggedAccount = ""
+        refreshLoginState()
     }
 
     // ---- 检查更新相关状态 ----
@@ -191,7 +197,7 @@ fun SettingsScreen(
 
             // 登录 NGA 账号
             Card(
-                onClick = { showLogin = true },
+                onClick = { onLoginClick() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -221,7 +227,7 @@ fun SettingsScreen(
                                 val name = loggedAccount
                                 if (name.isNotBlank()) "已登录：$name" else "已登录"
                             } else {
-                                "账号密码登录，或粘贴 Cookie 兜底"
+                                "网页登录，自动抓取 Cookie"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = if (logged) MaterialTheme.colorScheme.primary
@@ -235,16 +241,56 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // 粘贴 Cookie 兜底
+            if (!logged) {
+                TextButton(
+                    onClick = { showCookieDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "已有 Cookie？粘贴登录",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
         }
     }
 
-    if (showLogin) {
-        LoginDialog(onDismiss = {
-            showLogin = false
-            // 登录对话框关闭后刷新登录态展示
-            logged = CookieStore.isLogin()
-            loggedAccount = CookieStore.getAccountName()
-        })
+    if (showCookieDialog) {
+        AlertDialog(
+            onDismissRequest = { showCookieDialog = false },
+            title = { Text("粘贴 Cookie", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Text(
+                        "从浏览器复制 Cookie 字符串粘贴到下方：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = cookieInput,
+                        onValueChange = { cookieInput = it },
+                        label = { Text("Cookie") },
+                        singleLine = false,
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    CookieStore.save(cookieInput)
+                    refreshLoginState()
+                    showCookieDialog = false
+                }) { Text("保存", fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCookieDialog = false }) { Text("取消") }
+            }
+        )
     }
 
     // ---- 检查更新结果对话框 ----
