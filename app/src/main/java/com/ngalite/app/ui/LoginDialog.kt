@@ -10,25 +10,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.text.KeyboardOptions as KeyboardOpts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,8 +62,6 @@ fun LoginDialog(onDismiss: () -> Unit) {
     var account by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var typeIndex by remember { mutableStateOf(0) }
-    var typeMenuExpanded by remember { mutableStateOf(false) }
-    var agree by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
 
     // 图形验证码
@@ -116,21 +110,19 @@ fun LoginDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // 账号类型下拉
-                ExposedDropdownLite(
-                    label = ACCOUNT_TYPES[typeIndex].label,
-                    expanded = typeMenuExpanded,
-                    onExpandedChange = { typeMenuExpanded = it },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    ACCOUNT_TYPES.forEachIndexed { i, t ->
-                        DropdownMenuItem(
-                            text = { Text(t.label, fontWeight = if (i == typeIndex) FontWeight.SemiBold else FontWeight.Normal) },
-                            onClick = {
-                                typeIndex = i
-                                typeMenuExpanded = false
-                            }
+                // 账号类型
+                Text(
+                    "账号类型",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                ACCOUNT_TYPES.forEachIndexed { i, t ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = i == typeIndex,
+                            onClick = { typeIndex = i }
                         )
+                        Text(t.label, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -201,15 +193,7 @@ fun LoginDialog(onDismiss: () -> Unit) {
                     )
                 }
 
-                // 协议勾选
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = agree, onCheckedChange = { agree = it })
-                    Text(
-                        "我已阅读并同意用户协议及隐私政策",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // 用户协议默认同意，不显示勾选项
 
                 errorMsg?.let {
                     Spacer(Modifier.height(4.dp))
@@ -229,10 +213,6 @@ fun LoginDialog(onDismiss: () -> Unit) {
                             successMsg = null
                             if (account.isBlank() || password.isBlank()) {
                                 errorMsg = "请输入账号和密码"
-                                return@Button
-                            }
-                            if (!agree) {
-                                errorMsg = "请先同意用户协议"
                                 return@Button
                             }
                             val cs = captchaSession
@@ -340,35 +320,4 @@ fun LoginDialog(onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss, enabled = !isLoading) { Text("取消") }
         }
     )
-}
-
-/** 轻量下拉选择器：点击标签展开菜单。 */
-@Composable
-private fun ExposedDropdownLite(
-    label: String,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    Column(modifier = modifier) {
-        TextField(
-            value = label,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = {
-                IconButton(onClick = { onExpandedChange(!expanded) }) {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "选择账号类型")
-                }
-            }
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { onExpandedChange(false) }
-        ) {
-            content()
-        }
-    }
 }
