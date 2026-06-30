@@ -88,7 +88,7 @@ object NgaApi {
             .build()
 
         val loginResp = loginClient.newCall(loginReq).execute()
-        val bodyBytes = loginResp.body?.bytes().orEmpty()
+        val bodyBytes = loginResp.body?.bytes() ?: ByteArray(0)
         val body = String(bodyBytes, Charset.forName("GBK"))
         val httpCode = loginResp.code
         loginResp.close()
@@ -338,12 +338,13 @@ object NgaApi {
                 .build()
 
             val loginResp = client.newCall(loginReq).execute()
-            val body = loginResp.body?.string().orEmpty()
+            val bodyBytes = loginResp.body?.bytes() ?: ByteArray(0)
+            val body = String(bodyBytes, Charset.forName("GBK"))
             val httpCode = loginResp.code
             loginResp.close()
             if (httpCode !in 200..299) throw LoginException("网络错误 HTTP $httpCode")
 
-            val (uid, token, username) = parseLoginResult(body)
+            val (uid, token, username) = parseLoginResult(body, bodyBytes)
 
             val setForm = FormBody.Builder(null)
                 .add("uid", uid)
