@@ -2,6 +2,7 @@ package com.ngalite.app.ui
 
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -101,6 +102,12 @@ private fun createWebView(
             javaScriptEnabled = true
             domStorageEnabled = true
             userAgentString = NgaApi.UA
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            defaultTextEncodingName = "GBK"
+            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            allowFileAccess = false
+            allowContentAccess = true
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
@@ -114,7 +121,20 @@ private fun createWebView(
                 super.onPageFinished(view, url)
                 onLoadingChanged(false)
             }
+
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?
+            ) {
+                super.onReceivedError(view, errorCode, description, failingUrl)
+                onLoadingChanged(false)
+            }
         }
+
+        webChromeClient = WebChromeClient()
+
         loadUrl(LOGIN_URL)
     }
 }
