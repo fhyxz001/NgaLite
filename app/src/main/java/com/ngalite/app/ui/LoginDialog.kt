@@ -1,5 +1,7 @@
 package com.ngalite.app.ui
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.text.KeyboardOptions as KeyboardOpts
@@ -34,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -66,6 +70,12 @@ fun LoginDialog(onDismiss: () -> Unit) {
     var agree by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
 
+    // 图形验证码
+    var captchaSession by remember { mutableStateOf<NgaApi.CaptchaSession?>(null) }
+    var captchaText by remember { mutableStateOf("") }
+    var captchaBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var captchaLoading by remember { mutableStateOf(false) }
+
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var successMsg by remember { mutableStateOf<String?>(null) }
@@ -75,6 +85,21 @@ fun LoginDialog(onDismiss: () -> Unit) {
     var cookieInput by remember { mutableStateOf(CookieStore.get()) }
 
     val scope = rememberCoroutineScope()
+
+    /** 加载或刷新验证码图片 */
+    fun loadCaptchaImage(session: NgaApi.CaptchaSession) {
+        captchaLoading = true
+        scope.launch {
+            try {
+                val bytes = withContext(Dispatchers.IO) { session.fetchImageBytes() }
+                captchaBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size).asImageBitmap()
+            } catch (_: Exception) {
+                captchaBitmap = null
+            } finally {
+                captchaLoading = false
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -130,6 +155,52 @@ fun LoginDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
 
+                // 图形验证码区域（仅需要时显示）
+                if (captchaSession != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "图形验证码",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // 验证码图片
+                        if (captchaBitmap != null) {
+                            Image(
+                                bitmap = captchaBitmap!!,
+                                contentDescription = "验证码",
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .weight(1f)
+                            )
+                        } else if (captchaLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        // 刷新按钮
+                        IconButton(onClick = {
+                            captchaSession?.refresh()
+                            loadCaptchaImage(captchaSession!!)
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "换一张")
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = captchaText,
+                        onValueChange = { captchaText = it },
+                        label = { Text("请输入验证码（6个字符）") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 // 协议勾选
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = agree, onCheckedChange = { agree = it })
@@ -164,20 +235,50 @@ fun LoginDialog(onDismiss: () -> Unit) {
                                 errorMsg = "请先同意用户协议"
                                 return@Button
                             }
+                            val cs = captchaSession
+                            if (cs != null && captchaText.isBlank()) {
+                                errorMsg = "请输入验证码"
+                                return@Button
+                            }
                             isLoading = true
                             scope.launch {
                                 try {
-                                    val result = withContext(Dispatchers.IO) {
-                                        NgaApi.login(account, ACCOUNT_TYPES[typeIndex].value, password)
+                                    val result = if (cs != null) {
+                                        withContext(Dispatchers.IO) {
+                                            cs.login(account, ACCOUNT_TYPES[typeIndex].value, password, captchaText)
+                                        }
+                                    } else {
+                                        withContext(Dispatchers.IO) {
+                                            NgaApi.login(account, ACCOUNT_TYPES[typeIndex].value, password)
+                                        }
                                     }
                                     CookieStore.save(result.cookie)
                                     CookieStore.saveAccountName(result.username.ifBlank { account.trim() })
                                     successMsg = "登录成功"
-                                    // 短暂展示后关闭
                                     kotlinx.coroutines.delay(600)
                                     onDismiss()
                                 } catch (e: NgaApi.LoginException) {
-                                    errorMsg = e.message ?: "登录失败"
+                                    val msg = e.message ?: "登录失败"
+                                    if (NgaApi.isCaptchaError(msg)) {
+                                        if (cs != null) {
+                                            // 验证码错误，刷新
+                                            captchaText = ""
+                                            captchaBitmap = null
+                                            cs.refresh()
+                                            loadCaptchaImage(cs)
+                                            errorMsg = msg
+                                        } else {
+                                            // 首次遇到需要验证码，创建会话并加载图片
+                                            val newCs = NgaApi.CaptchaSession("login")
+                                            captchaSession = newCs
+                                            captchaText = ""
+                                            captchaBitmap = null
+                                            loadCaptchaImage(newCs)
+                                            errorMsg = "请先输入图形验证码，再点击登录"
+                                        }
+                                    } else {
+                                        errorMsg = msg
+                                    }
                                 } catch (e: Exception) {
                                     errorMsg = "网络错误：${e.message ?: "请稍后重试"}"
                                 } finally {

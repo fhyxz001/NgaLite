@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /** NGA 网络请求：携带 Cookie + 桌面 UA，按 GBK 解码 */
 object NgaApi {
@@ -123,15 +124,16 @@ object NgaApi {
     /**
      * 解析 /nuke.php 登录响应：`window.script_muti_get_var_store={json}` 或纯 JSON。
      * 成功返回 (uid, token, username)，失败抛 [LoginException]。
+     *
+     * 注意 NGA 登录响应实际为 GBK 编码（Content-Type: text/javascript; charset=GBK），
+     * 调用方需按 GBK 解码后再传入。
      */
     private fun parseLoginResult(body: String): Triple<String, String, String> {
         val json = extractJson(body) ?: throw LoginException("登录响应解析失败")
-        // error 字段：["错误信息", "错误码"]
-        val errorMatch = Regex(""""error"\s*:\s*\[(.*?)]""").find(json)
-        if (errorMatch != null) {
-            val msg = Regex(""""([^"]*)"""").find(errorMatch.groupValues[1])?.groupValues?.lastOrNull() ?: ""
-            throw LoginException(msg.ifBlank { "登录失败，请稍后重试" })
-        }
+        // error 字段：网页端用 y.error[0]/y.error[1] 读取，既可能是数组 ["信息","码"]，
+        // 也可能是对象 {"0":"信息","1":"码"}（实测验证码场景即为对象）。两种都要识别。
+        val errorMsg = extractError(json)
+        if (errorMsg != null) throw LoginException(errorMsg)
         // data = [ ... ]，用括号配平提取，避免数组内嵌 ] 被非贪婪正则提前截断
         val dataKeyIdx = json.indexOf(""""data"""")
         if (dataKeyIdx < 0) throw LoginException("登录响应解析失败")
@@ -146,6 +148,54 @@ object NgaApi {
         val username = Regex(""""username"\s*:\s*"((?:[^"\\]|\\.)*)"""").find(item3)
             ?.groupValues?.lastOrNull()?.replace("\\\"", "\"").orEmpty()
         return Triple(uid, token, username)
+    }
+
+    /**
+     * 从 JSON 文本中提取 error 的可读信息（兼容数组与对象两种形态）。
+     * - 数组：`"error":["信息","码"]` → 取第一个字符串元素
+     * - 对象：`"error":{"0":"信息","1":"码"}` → 取 "0" 或第一个字符串值
+     * 返回 null 表示没有 error 字段。
+     */
+    private fun extractError(json: String): String? {
+        val keyIdx = json.indexOf(""""error"""")
+        if (keyIdx < 0) return null
+        // 跳过 "error": 后的空白，找到值起始字符
+        var i = json.indexOf(':', keyIdx) + 1
+        while (i < json.length && json[i].isWhitespace()) i++
+        if (i >= json.length) return null
+        return when (json[i]) {
+            '[' -> {
+                val arr = extractArrayAfter(json, keyIdx) ?: return null
+                // 取数组里第一个 "..." 字符串
+                Regex(""""([^"]*)"""").find(arr)?.groupValues?.lastOrNull()
+            }
+            '{' -> {
+                val obj = extractObjectAfter(json, keyIdx) ?: return null
+                // 优先取 "0" 字段，否则取第一个字符串值
+                Regex(""""0"\s*:\s*"((?:[^"\\]|\\.)*)"""").find(obj)?.groupValues?.lastOrNull()
+                    ?: Regex(""":"((?:[^"\\]|\\.)*)"""").find(obj)?.groupValues?.lastOrNull()
+            }
+            else -> null
+        }?.replace("\\\"", "\"")?.ifBlank { null }
+    }
+
+    /** 从 [from] 位置之后找到 `"error":` 等键对应的对象并按括号配平截取。 */
+    private fun extractObjectAfter(s: String, from: Int): String? {
+        val objStart = s.indexOf('{', from)
+        if (objStart < 0) return null
+        var depth = 0
+        var i = objStart
+        while (i < s.length) {
+            when (s[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return s.substring(objStart + 1, i)
+                }
+            }
+            i++
+        }
+        return null
     }
 
     /** 从 [from] 位置之后找到 `"data":` 对应的数组并按括号配平截取其内容。 */
@@ -206,8 +256,116 @@ object NgaApi {
     /** 登录失败异常，携带服务端/可读错误信息。 */
     class LoginException(message: String) : RuntimeException(message)
 
-    /** 临时 CookieJar，仅用于捕获登录流程中服务端下发的 Set-Cookie。 */
-    private class MemCookieJar : CookieJar {
+    /** 判断错误信息是否表示需要图形验证码。 */
+    fun isCaptchaError(message: String?): Boolean {
+        if (message == null) return false
+        return "验证码" in message || "captcha" in message.lowercase()
+    }
+
+    /**
+     * 图形验证码会话：保持同一 cookie 会话，用于先加载验证码图片再提交登录。
+     *
+     * 用法：
+     * 1. 构造 [CaptchaSession]（自动生成 captchaId 和共享 OkHttpClient）
+     * 2. 用 [imageUrl] 加载验证码图片（或用 [fetchImageBytes] 直接拉取字节）
+     * 3. 用户输入验证码后调用 [login]
+     * 4. 验证码错误时可调用 [refresh] 换一张图
+     */
+    class CaptchaSession(private val from: String = "login") {
+
+        var captchaId: String = generateCaptchaId()
+            private set
+
+        private val jar = MemCookieJar()
+        private val client = OkHttpClient.Builder()
+            .cookieJar(jar)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        val imageUrl: String
+            get() = "$BASE/login_check_code.php?id=$captchaId&from=$from"
+
+        fun refresh() {
+            captchaId = generateCaptchaId()
+        }
+
+        /** 下载验证码图片字节（使用会话 cookie）。 */
+        fun fetchImageBytes(): ByteArray {
+            val req = Request.Builder()
+                .url(imageUrl)
+                .header("User-Agent", UA)
+                .header("Referer", "$BASE/nuke.php?__lib=login&__act=account&login")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw RuntimeException("验证码加载失败 HTTP ${resp.code}")
+                return resp.body?.bytes() ?: throw RuntimeException("验证码图片为空")
+            }
+        }
+
+        /**
+         * 使用图形验证码登录。
+         *
+         * @param captchaText 用户输入的验证码文本（通常 6 个字符）
+         */
+        fun login(name: String, type: String, password: String, captchaText: String): LoginResult {
+            val encPwd = RsaCipher.encrypt(password.trim())
+            val prid = "P" + Random.nextDouble().toString().substring(2)
+            val form = FormBody.Builder(null)
+                .add("__lib", "login")
+                .add("__output", "1")
+                .add("__act", "login")
+                .add("name", name.trim())
+                .add("type", type)
+                .add("password", encPwd)
+                .add("rid", captchaId)
+                .add("captcha", captchaText.trim())
+                .add("prid", prid)
+                .add("__inchst", "UTF-8")
+                .build()
+
+            val loginReq = Request.Builder()
+                .url("$BASE/nuke.php")
+                .header("User-Agent", UA)
+                .header("Referer", "$BASE/nuke.php?__lib=login&__act=account&login")
+                .post(form)
+                .build()
+
+            val loginResp = client.newCall(loginReq).execute()
+            val body = loginResp.body?.string().orEmpty()
+            val httpCode = loginResp.code
+            loginResp.close()
+            if (httpCode !in 200..299) throw LoginException("网络错误 HTTP $httpCode")
+
+            val (uid, token, username) = parseLoginResult(body)
+
+            val setForm = FormBody.Builder(null)
+                .add("uid", uid)
+                .add("cid", token)
+                .build()
+            val setReq = Request.Builder()
+                .url("$BASE/nuke.php?__lib=login&__act=login_set_cookie_quick&__output=9")
+                .header("User-Agent", UA)
+                .header("Referer", "$BASE/nuke.php?__lib=login&__act=account&login")
+                .post(setForm)
+                .build()
+            client.newCall(setReq).execute().close()
+
+            val cookieHeader = jar.cookieHeader()
+            val cookie = if (cookieHeader.isBlank()) {
+                "ngaPassportUid=$uid; ngaPassportCid=$token"
+            } else {
+                cookieHeader
+            }
+            return LoginResult(cookie = cookie, username = username)
+        }
+
+        private fun generateCaptchaId(): String =
+            from + Random.nextDouble().toString().substring(2)
+    }
+
+    /** 临时 CookieJar，用于捕获登录流程中服务端下发的 Set-Cookie。 */
+    internal class MemCookieJar : CookieJar {
         private val store = mutableListOf<Cookie>()
 
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
