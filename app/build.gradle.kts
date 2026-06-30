@@ -11,8 +11,8 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.53"
+        versionCode = 15
+        versionName = "1.54"
     }
 
     buildTypes {

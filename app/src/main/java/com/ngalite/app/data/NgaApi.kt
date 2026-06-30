@@ -140,13 +140,28 @@ object NgaApi {
         // 也可能是对象 {"0":"信息","1":"码"}（实测验证码场景即为对象）。两种都要识别。
         val errorMsg = extractError(json)
         if (errorMsg != null) throw LoginException(errorMsg)
-        // data = [ ... ]，用括号配平提取，避免数组内嵌 ] 被非贪婪正则提前截断
+
+        // data 字段：与 error 一样既可能是数组 [...] 也可能是对象 {...}。
         val dataKeyIdx = json.indexOf(""""data"""")
         if (dataKeyIdx < 0) throw LoginException(err("未找到 data 字段"))
-        val dataArr = extractArrayAfter(json, dataKeyIdx)
-            ?: throw LoginException(err("data 数组解析失败"))
-        // data[3] = {"uid":xxxxx,"token":"xxxxx","username":"...", ...}，本身是个对象
-        val item3 = extractNthObject(dataArr, 3) ?: throw LoginException(err("未找到 data[3]"))
+        val dataStart = skipToValue(json, dataKeyIdx)
+        val item3 = when {
+            dataStart == '[' -> {
+                val dataArr = extractArrayAfter(json, dataKeyIdx)
+                    ?: throw LoginException(err("data 数组解析失败"))
+                extractNthObject(dataArr, 3)
+            }
+            dataStart == '{' -> {
+                val dataObj = extractObjectAfter(json, dataKeyIdx)
+                    ?: throw LoginException(err("data 对象解析失败"))
+                extractValueOfKey(dataObj, "3")?.let { v ->
+                    // v 是 "3" 对应的值，可能以 { 开头（对象）或以数字/字符串开头
+                    val objStart = v.indexOf('{')
+                    if (objStart >= 0) v.substring(objStart) else v
+                }
+            }
+            else -> null
+        } ?: throw LoginException(err("未找到 data[3]"))
         val uid = Regex(""""uid"\s*:\s*"?(\d+)"""").find(item3)?.groupValues?.lastOrNull()
             ?: throw LoginException("未获取到 uid")
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(item3)?.groupValues?.lastOrNull()
@@ -257,6 +272,72 @@ object NgaApi {
             }
         }
         return null
+    }
+
+    /** 跳过 `"key":` 找到值的起始字符，返回该字符（`[`/`{`/`"`/数字等）或 null。 */
+    private fun skipToValue(s: String, keyEnd: Int): Char? {
+        var i = s.indexOf(':', keyEnd) + 1
+        while (i < s.length && s[i].isWhitespace()) i++
+        return s.getOrNull(i)
+    }
+
+    /**
+     * 在 JSON 对象文本 [obj]（不含外层花括号）中，取出键 [key] 对应的值子串。
+     * 支持值为字符串、数字、对象、数组。
+     */
+    private fun extractValueOfKey(obj: String, key: String): String? {
+        val pat = """"$key"\s*:\s*"""
+        val m = Regex(pat).find(obj) ?: return null
+        val start = m.range.last + 1
+        if (start >= obj.length) return null
+        val c = obj[start]
+        return when (c) {
+            '"' -> {
+                // 字符串值：找到结束引号
+                var i = start + 1
+                while (i < obj.length) {
+                    if (obj[i] == '\\') { i += 2; continue }
+                    if (obj[i] == '"') return obj.substring(start, i + 1)
+                    i++
+                }
+                null
+            }
+            '{' -> {
+                var depth = 0
+                var i = start
+                while (i < obj.length) {
+                    when (obj[i]) {
+                        '{' -> depth++
+                        '}' -> {
+                            depth--
+                            if (depth == 0) return obj.substring(start, i + 1)
+                        }
+                    }
+                    i++
+                }
+                null
+            }
+            '[' -> {
+                var depth = 0
+                var i = start
+                while (i < obj.length) {
+                    when (obj[i]) {
+                        '[' -> depth++
+                        ']' -> {
+                            depth--
+                            if (depth == 0) return obj.substring(start, i + 1)
+                        }
+                    }
+                    i++
+                }
+                null
+            }
+            else -> {
+                // 数字或布尔值：读到逗号或结束花括号
+                val end = obj.indexOfFirst { it in setOf(',', '}') }.let { if (it < 0) obj.length else it }
+                obj.substring(start, end).trim().takeIf { it.isNotEmpty() }
+            }
+        }
     }
 
     /** 登录失败异常，携带服务端/可读错误信息。 */
