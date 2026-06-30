@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,16 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showLogin by remember { mutableStateOf(false) }
+    // 登录态展示：进入页面与登录对话框关闭后刷新
+    var loggedAccount by remember { mutableStateOf(CookieStore.getAccountName()) }
+    var logged by remember { mutableStateOf(CookieStore.isLogin()) }
+
+    /** 退出登录：清空 Cookie 与账号信息 */
+    fun logout() {
+        CookieStore.clear()
+        logged = false
+        loggedAccount = ""
+    }
 
     // ---- 检查更新相关状态 ----
     var isCheckingUpdate by remember { mutableStateOf(false) }
@@ -178,7 +189,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Cookie 登录
+            // 登录 NGA 账号
             Card(
                 onClick = { showLogin = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -195,21 +206,32 @@ fun SettingsScreen(
                     val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
                     Image(
                         bitmap = cookieBitmap.asImageBitmap(),
-                        contentDescription = "Cookie 登录",
+                        contentDescription = "登录 NGA 账号",
                         modifier = Modifier.size(28.dp)
                     )
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "Cookie 登录",
+                            "登录 NGA 账号",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "导入 ngaPassportCid 等 Cookie",
+                            if (logged) {
+                                val name = loggedAccount
+                                if (name.isNotBlank()) "已登录：$name" else "已登录"
+                            } else {
+                                "账号密码登录，或粘贴 Cookie 兜底"
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = if (logged) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline
                         )
+                    }
+                    if (logged) {
+                        TextButton(onClick = { logout() }) {
+                            Text("退出登录", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
@@ -217,7 +239,12 @@ fun SettingsScreen(
     }
 
     if (showLogin) {
-        LoginDialog(onDismiss = { showLogin = false })
+        LoginDialog(onDismiss = {
+            showLogin = false
+            // 登录对话框关闭后刷新登录态展示
+            logged = CookieStore.isLogin()
+            loggedAccount = CookieStore.getAccountName()
+        })
     }
 
     // ---- 检查更新结果对话框 ----
