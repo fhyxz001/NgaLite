@@ -80,6 +80,7 @@ data class Forum(val fid: String, val name: String)
 private val FORUMS = listOf(
     Forum("-7955747", "晴风村"),
     Forum("-7", "网事杂谈"),
+    Forum("706", "大时代"),
     Forum("-447601", "二次元国家地理"),
     Forum("-60252908", "旮旯game"),
     Forum("498", "二手交易"),
