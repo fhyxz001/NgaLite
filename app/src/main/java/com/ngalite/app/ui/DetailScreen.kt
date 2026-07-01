@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -139,10 +140,11 @@ class DetailViewModel : ViewModel() {
                 val originalPost = result.posts.firstOrNull()
                 val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
                 _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
                 if (myGen != loadGeneration) return@launch
-                _state.value = DetailUiState.Error(e.message ?: "未知错误")
+                _state.value = DetailUiState.Error(t.message ?: "未知错误")
             }
         }
     }
@@ -403,7 +405,7 @@ fun DetailScreen(
                     }
                 }
 
-                items(s.comments, key = { it.floor + it.author }) { post ->
+                itemsIndexed(s.comments, key = { index, post -> "$index-${post.floor}-${post.author}" }) { _, post ->
                     CommentCard(post) { fullScreenImageUrl = it }
                 }
             }
@@ -569,59 +571,62 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
     // 缓存节点分组结果，避免每次重组都重新遍历
     val groupedNodes = remember(nodes) { groupContentNodes(nodes) }
 
-    groupedNodes.forEach { group ->
-        when (group) {
-            is NodeGroup.Inline -> {
-                InlineRichText(group.nodes)
-            }
-            is NodeGroup.Image -> {
-                val request = remember(group.url, screenWidthPx) {
-                    ImageRequest.Builder(context)
-                        .data(group.url)
-                        .size(Size(Dimension.Pixels(screenWidthPx), Dimension.Undefined))
-                        .build()
+    groupedNodes.forEachIndexed { index, group ->
+        // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
+        key(index, group::class) {
+            when (group) {
+                is NodeGroup.Inline -> {
+                    InlineRichText(group.nodes)
                 }
-                AsyncImage(
-                    model = request,
-                    contentDescription = "图片",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { onImageClick(group.url) },
-                    contentScale = ContentScale.FillWidth
-                )
-            }
-            is NodeGroup.Quote -> {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Max)
-                        .padding(top = 12.dp, bottom = 4.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Box(
+                is NodeGroup.Image -> {
+                    val request = remember(group.url, screenWidthPx) {
+                        ImageRequest.Builder(context)
+                            .data(group.url)
+                            .size(Size(Dimension.Pixels(screenWidthPx), Dimension.Undefined))
+                            .build()
+                    }
+                    AsyncImage(
+                        model = request,
+                        contentDescription = "图片",
                         modifier = Modifier
-                            .width(3.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.primary)
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onImageClick(group.url) },
+                        contentScale = ContentScale.FillWidth
                     )
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            "引用",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
+                }
+                is NodeGroup.Quote -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Max)
+                            .padding(top = 12.dp, bottom = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary)
                         )
-                        Text(
-                            group.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                "引用",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                group.content,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -685,37 +690,40 @@ private fun InlineRichText(nodes: List<ContentNode>) {
         modifier = Modifier.padding(top = 10.dp),
         horizontalArrangement = Arrangement.Start
     ) {
-        nodes.forEach { node ->
-            when (node) {
-                is ContentNode.Text -> {
-                    if (node.text.isNotBlank()) {
-                        Text(
-                            node.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+        nodes.forEachIndexed { index, node ->
+            // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
+            key(index, node::class) {
+                when (node) {
+                    is ContentNode.Text -> {
+                        if (node.text.isNotBlank()) {
+                            Text(
+                                node.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                }
-                is ContentNode.Emoji -> {
-                    val key = "${node.folder}/${node.name}"
-                    if (key in emojiExists) {
-                        AsyncImage(
-                            model = "file:///android_asset/$key.png",
-                            contentDescription = node.name,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .padding(horizontal = 1.dp),
-                            placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        )
-                    } else {
-                        Text(
-                            "[s:${node.folder}:${node.name}]",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                    is ContentNode.Emoji -> {
+                        val key = "${node.folder}/${node.name}"
+                        if (key in emojiExists) {
+                            AsyncImage(
+                                model = "file:///android_asset/$key.png",
+                                contentDescription = node.name,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .padding(horizontal = 1.dp),
+                                placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            )
+                        } else {
+                            Text(
+                                "[s:${node.folder}:${node.name}]",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
+                    else -> {}
                 }
-                else -> {}
             }
         }
     }

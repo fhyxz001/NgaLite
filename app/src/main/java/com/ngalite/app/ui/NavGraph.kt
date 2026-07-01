@@ -1,6 +1,5 @@
 package com.ngalite.app.ui
 
-import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,25 +18,22 @@ object Routes {
     const val SETTINGS = "settings"
     const val LOGIN_WEB = "login_web"
     const val FORUM_SELECT = "forum_select"
-    const val DETAIL = "detail/{tid}/{forumName}"
-    fun detail(tid: String, forumName: String) = "detail/$tid/${Uri.encode(forumName)}"
+    const val DETAIL = "detail/{tid}"
+    fun detail(tid: String) = "detail/$tid"
 }
 
 @Composable
 fun NavGraph() {
     val nav = rememberNavController()
     var lastNavTime by remember { mutableStateOf(0L) }
-    val minNavInterval = 800L
+    val minNavInterval = 500L
 
     fun navigateOnce(route: String) {
         val now = System.currentTimeMillis()
         if (now - lastNavTime < minNavInterval) return
         lastNavTime = now
         runCatching {
-            nav.navigate(route) {
-                launchSingleTop = true
-                restoreState = true
-            }
+            nav.navigate(route)
         }.onFailure { e ->
             Log.e("NavGraph", "导航失败: $route", e)
         }
@@ -49,7 +45,7 @@ fun NavGraph() {
             ListScreen(
                 vm = vm,
                 onTopicClick = { tid ->
-                    navigateOnce(Routes.detail(tid, vm.currentForum.value.name))
+                    navigateOnce(Routes.detail(tid))
                 },
                 onSettingsClick = { navigateOnce(Routes.SETTINGS) },
                 onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
@@ -79,12 +75,14 @@ fun NavGraph() {
         composable(
             route = Routes.DETAIL,
             arguments = listOf(
-                navArgument("tid") { type = NavType.StringType },
-                navArgument("forumName") { type = NavType.StringType }
+                navArgument("tid") { type = NavType.StringType }
             )
         ) { backStackEntry ->
             val tid = backStackEntry.arguments?.getString("tid").orEmpty()
-            val forumName = backStackEntry.arguments?.getString("forumName").orEmpty()
+            // 从 ListViewModel 获取当前板块名称，避免通过路由传递（消除 URL 编码问题）
+            val listEntry = nav.getBackStackEntry(Routes.LIST)
+            val listVm: ListViewModel = viewModel(listEntry)
+            val forumName = listVm.currentForum.value.name
             DetailScreen(tid = tid, forumName = forumName, onBack = { nav.popBackStack() })
         }
     }
