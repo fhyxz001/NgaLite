@@ -54,7 +54,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.Forum
+import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Topic
@@ -76,31 +79,11 @@ sealed interface ListUiState {
     data class LoginRequired(val forumName: String) : ListUiState
 }
 
-data class Forum(
-    val fid: String,
-    val name: String,
-    val description: String = ""
-)
-
-internal val FORUMS = listOf(
-    Forum("-7955747", "晴风村", "情感生活"),
-    Forum("-7", "网事杂谈", "闲聊灌水"),
-    Forum("706", "大时代", "股票财经"),
-    Forum("-447601", "二次元国家地理", "动漫二次元"),
-    Forum("-60252908", "旮旯game", "Galgame"),
-    Forum("498", "二手交易", "二手闲置"),
-    Forum("428", "手综", "手游综合"),
-    Forum("-202020", "程序员职业交流", "IT 职场"),
-    Forum("422", "炉石传说", "Hearthstone"),
-    Forum("840", "游戏王大师决斗", "Master Duel"),
-    Forum("510558", "洛克王国世界", "洛克王国"),
-)
-
 private val LOGIN_REQUIRED_FIDS = setOf("-7", "-7955747")
 private fun Forum.requiresLogin(): Boolean = fid in LOGIN_REQUIRED_FIDS
 
 class ListViewModel : ViewModel() {
-    private var fid = FORUMS.first().fid
+    private var fid = ""
     private val _state = MutableStateFlow<ListUiState>(ListUiState.Loading)
     val state: StateFlow<ListUiState> = _state
 
@@ -109,11 +92,20 @@ class ListViewModel : ViewModel() {
     private var isLoadingMore = false
     private val allTopics = mutableListOf<Topic>()
 
-    private val _currentForum = MutableStateFlow(FORUMS.first())
+    private val _currentForum = MutableStateFlow(Forum("", "加载中"))
     val currentForum: StateFlow<Forum> = _currentForum
-    private var lastAccessibleForum: Forum = FORUMS.first { !it.requiresLogin() }
+    private var lastAccessibleForum: Forum? = null
 
-    init { load() }
+    init {
+        viewModelScope.launch {
+            ForumRepository.ensureLoaded(NgaApp.instance)
+            val first = ForumRepository.allForums.first()
+            fid = first.fid
+            _currentForum.value = first
+            lastAccessibleForum = ForumRepository.allForums.first { !it.requiresLogin() }
+            load()
+        }
+    }
 
     fun switchForum(forum: Forum) {
         if (forum.fid == fid) return
@@ -127,9 +119,9 @@ class ListViewModel : ViewModel() {
 
     /** 取消登录后回到上次无需登录的板块 */
     fun revertFromLoginRequired() {
-        if (_currentForum.value.requiresLogin()) {
-            fid = lastAccessibleForum.fid
-            _currentForum.value = lastAccessibleForum
+        if (_currentForum.value.requiresLogin() && lastAccessibleForum != null) {
+            fid = lastAccessibleForum!!.fid
+            _currentForum.value = lastAccessibleForum!!
         }
         load()
     }

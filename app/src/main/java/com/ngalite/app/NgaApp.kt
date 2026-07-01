@@ -5,11 +5,14 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
-import com.ngalite.app.data.NgaApi
 import java.util.concurrent.TimeUnit
+import com.ngalite.app.data.ForumRepository
 
 class NgaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
@@ -17,6 +20,10 @@ class NgaApp : Application(), ImageLoaderFactory {
         instance = this
         // 把已保存的登录 Cookie 注入 OkHttp CookieJar，避免请求时丢失登录态
         NgaApi.setLoginCookies(com.ngalite.app.data.CookieStore.get())
+        // 预加载板块数据
+        CoroutineScope(Dispatchers.IO).launch {
+            ForumRepository.load(this@NgaApp)
+        }
     }
 
     /** 配置 Coil 全局图片加载器：内存/磁盘缓存 + 图片复用连接池 */
