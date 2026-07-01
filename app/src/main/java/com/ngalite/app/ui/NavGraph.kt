@@ -1,12 +1,19 @@
 package com.ngalite.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 object Routes {
     const val LIST = "list"
@@ -20,14 +27,25 @@ object Routes {
 @Composable
 fun NavGraph() {
     val nav = rememberNavController()
+    val scope = rememberCoroutineScope()
+    var navLock by remember { mutableStateOf(false) }
+
+    fun navigateOnce(route: String) {
+        if (navLock) return
+        navLock = true
+        nav.navigate(route)
+        scope.launch { delay(200); navLock = false }
+    }
+
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) { backStackEntry ->
             val vm: ListViewModel = viewModel(backStackEntry)
+            val currentName = vm.currentForum.value.name
             ListScreen(
                 vm = vm,
-                onTopicClick = { tid -> nav.navigate(Routes.detail(tid, vm.currentForum.value.name)) },
-                onSettingsClick = { nav.navigate(Routes.SETTINGS) },
-                onForumSelectClick = { nav.navigate(Routes.FORUM_SELECT) }
+                onTopicClick = { tid -> navigateOnce(Routes.detail(tid, currentName)) },
+                onSettingsClick = { navigateOnce(Routes.SETTINGS) },
+                onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
             )
         }
         composable(Routes.FORUM_SELECT) { backStackEntry ->

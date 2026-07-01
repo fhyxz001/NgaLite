@@ -98,6 +98,7 @@ class ListViewModel : ViewModel() {
     val currentForum: StateFlow<Forum> = _currentForum
     private var lastAccessibleForum: Forum? = null
     private var loadJob: kotlinx.coroutines.Job? = null
+    private var loadMoreJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -133,12 +134,15 @@ class ListViewModel : ViewModel() {
         currentPage = 1
         hasMore = true
         allTopics.clear()
+        loadJob?.cancel()
+        loadMoreJob?.cancel()
+        isLoadingMore = false
         val forum = _currentForum.value
         if (forum.requiresLogin() && !CookieStore.isLogin()) {
             _state.value = ListUiState.LoginRequired(forum.name)
             return
         }
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             _state.value = ListUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
@@ -154,9 +158,10 @@ class ListViewModel : ViewModel() {
 
     fun loadMore() {
         if (isLoadingMore || !hasMore) return
+        loadMoreJob?.cancel()
         isLoadingMore = true
         val nextPage = currentPage + 1
-        viewModelScope.launch {
+        loadMoreJob = viewModelScope.launch {
             _state.value = ListUiState.Success(
                 topics = allTopics.toList(),
                 isLoadingMore = true,
