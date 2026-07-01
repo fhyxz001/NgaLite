@@ -4,6 +4,13 @@ package com.ngalite.app.data
 object UbbParser {
 
     private const val IMG_BASE = "https://img.nga.178.com/attachments/"
+    private const val T_IMG = 0
+    private const val T_QUOTE = 1
+    private const val T_EMOJI = 2
+    private const val IMG_PREFIX = "[img]"
+    private const val IMG_SUFFIX = "[/img]"
+    private const val QUOTE_PREFIX = "[quote]"
+    private const val QUOTE_SUFFIX = "[/quote]"
 
     /** 匹配 [s:ac:blink] / [s:a2:xxx] / [s:ng:xxx] / [s:pst:xxx] / [s:dt:xxx] / [s:pg:xxx] 格式的表情标签 */
     private val EMOJI_REGEX = Regex("""\[s:(ac|a2|ng|pst|dt|pg):([^\]]+)]""")
@@ -16,24 +23,15 @@ object UbbParser {
 
     private data class TagPos(val type: Int, val start: Int, val end: Int)
 
-    companion object {
-        private const val T_IMG = 0
-        private const val T_QUOTE = 1
-        private const val T_EMOJI = 2
-        private const val IMG_PREFIX = "[img]"
-        private const val IMG_SUFFIX = "[/img]"
-        private const val QUOTE_PREFIX = "[quote]"
-        private const val QUOTE_SUFFIX = "[/quote]"
-        private val STRIP_UBB = Regex("""\[/?[a-z]+\w*(?:=[^\]]*)?]""")
-        private val PID_REPLY = Regex("""\[pid=[^\]]*]Reply\[/pid]""")
-        private val BOLD_BLOCK = Regex("""\[b](.*?)\[/b]""")
-        private val CLEAN_DATE = Regex("""\s*\(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}\)""")
-        private val CLEAN_TRAIL_COLON = Regex("""\s*:\s*$""")
-        private val POST_BY = Regex("""(?i)\bPost by\b""")
-        private val REPLY_TO = Regex("""(?i)\bReply to\b""")
-        private val MULTI_SPACE = Regex("""[ \t]+""")
-        private val MULTI_NEWLINE_UBB = Regex("""\n{3,}""")
-    }
+    private val STRIP_UBB = Regex("""\[/?[a-z]+\w*(?:=[^\]]*)?]""")
+    private val PID_REPLY = Regex("""\[pid=[^\]]*]Reply\[/pid]""")
+    private val BOLD_BLOCK = Regex("""\[b](.*?)\[/b]""")
+    private val CLEAN_DATE = Regex("""\s*\(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}\)""")
+    private val CLEAN_TRAIL_COLON = Regex("""\s*:\s*$""")
+    private val POST_BY = Regex("""(?i)\bPost by\b""")
+    private val REPLY_TO = Regex("""(?i)\bReply to\b""")
+    private val MULTI_SPACE = Regex("""[ \t]+""")
+    private val MULTI_NEWLINE_UBB = Regex("""\n{3,}""")
 
     /** 解析正文，返回 ContentNode 列表 */
     fun parse(content: String): List<ContentNode> {

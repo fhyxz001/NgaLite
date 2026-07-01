@@ -6,18 +6,15 @@ import org.jsoup.Jsoup
 object NgaParser {
 
     private val TID_REGEX = Regex("""tid=(\d+)""")
-
-    companion object {
-        private val BR_REGEX = """(?i)<br\s*/?>""".toRegex()
-        private val P_REGEX = """(?i)</p>""".toRegex()
-        private val DIV_REGEX = """(?i)</div>""".toRegex()
-        private val TAG_REGEX = """(?i)<[^>]+>""".toRegex()
-        private val MULTI_NEWLINE = """\n{3,}""".toRegex()
-        private val VIEWS_REGEX = Regex("""浏览\s*[：:]?\s*([+\-]?\d+)""")
-        private val LIKES_REGEX = Regex("""赞\s*[（(]?\s*([+\-]?\d+)\s*[）)]?""")
-        private val NUM_CLEAN = Regex("[^0-9-]")
-        private val TITLE_CLEAN = Regex("""\s*NGA.*$""")
-    }
+    private val BR_REGEX = """(?i)<br\s*/?>""".toRegex()
+    private val P_REGEX = """(?i)</p>""".toRegex()
+    private val DIV_REGEX = """(?i)</div>""".toRegex()
+    private val TAG_REGEX = """(?i)<[^>]+>""".toRegex()
+    private val MULTI_NEWLINE = """\n{3,}""".toRegex()
+    private val VIEWS_REGEX = Regex("""浏览\s*[：:]?\s*([+\-]?\d+)""")
+    private val LIKES_REGEX = Regex("""赞\s*[（(]?\s*([+\-]?\d+)\s*[）)]?""")
+    private val NUM_CLEAN = Regex("[^0-9-]")
+    private val TITLE_CLEAN = Regex("""\s*NGA.*$""")
 
     /** 从已解析的文档中提取标题 */
     private fun extractTitle(doc: org.jsoup.nodes.Document): String {

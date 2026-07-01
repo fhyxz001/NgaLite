@@ -471,17 +471,6 @@ object NgaApi {
             from + Random.nextDouble().toString().substring(2)
     }
 
-    /** 共享的连接池和客户端构建器（登录等无需持久 cookie 的临时请求复用） */
-    private val sharedConnPool = ConnectionPool(4, 1, TimeUnit.MINUTES)
-
-    private fun loginClient(cookieJar: CookieJar): OkHttpClient =
-        OkHttpClient.Builder()
-            .cookieJar(cookieJar)
-            .connectionPool(sharedConnPool)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-
     /** 临时 CookieJar，用于捕获登录流程中服务端下发的 Set-Cookie。 */
     internal class MemCookieJar : CookieJar {
         private val store = mutableListOf<Cookie>()
