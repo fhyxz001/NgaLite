@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,14 +43,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
+
+private val StarColor = Color(0xFFFFC107)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,11 +67,24 @@ fun ForumSelectScreen(
     var isSearching by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var categories by remember { mutableStateOf<List<ForumCategory>>(emptyList()) }
+    var favoriteFids by remember { mutableStateOf(FavoriteStore.getFavorites()) }
 
     // 异步加载板块数据
     LaunchedEffect(Unit) {
         ForumRepository.load(context)
         categories = ForumRepository.categories
+    }
+
+    // 收藏的板块对象列表
+    val favoriteForums = remember(favoriteFids, categories) {
+        if (favoriteFids.isEmpty()) emptyList()
+        else ForumRepository.allForums.filter { it.fid in favoriteFids }
+    }
+
+    // 切换收藏
+    fun toggleFavorite(fid: String) {
+        FavoriteStore.toggle(fid)
+        favoriteFids = FavoriteStore.getFavorites()
     }
 
     val filteredCategories = remember(searchQuery, categories) {
@@ -127,13 +148,41 @@ fun ForumSelectScreen(
                 .padding(padding),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // ---- 收藏板块（置顶展示） ----
+            if (favoriteForums.isNotEmpty() && searchQuery.isBlank()) {
+                item(key = "header_favorites") {
+                    CategoryHeader(name = "收藏板块")
+                }
+                itemsIndexed(
+                    items = favoriteForums,
+                    key = { _, f -> "fav_${f.fid}" }
+                ) { index, forum ->
+                    ForumSelectItem(
+                        forum = forum,
+                        isSelected = forum.fid == currentForum.fid,
+                        isFavorite = true,
+                        onFavoriteClick = { toggleFavorite(forum.fid) },
+                        onClick = { onForumSelected(forum) }
+                    )
+                    if (index < favoriteForums.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                }
+                // 与下方分类的间距
+                item(key = "fav_spacer") {
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+
+            // ---- 全部分类 ----
             filteredCategories.forEach { category ->
-                // 分类标题
                 item(key = "header_${category.name}") {
                     CategoryHeader(name = category.name)
                 }
 
-                // 该分类下的板块
                 itemsIndexed(
                     items = category.forums,
                     key = { _, forum -> forum.fid }
@@ -141,6 +190,8 @@ fun ForumSelectScreen(
                     ForumSelectItem(
                         forum = forum,
                         isSelected = forum.fid == currentForum.fid,
+                        isFavorite = forum.fid in favoriteFids,
+                        onFavoriteClick = { toggleFavorite(forum.fid) },
                         onClick = { onForumSelected(forum) }
                     )
                     if (index < category.forums.lastIndex) {
@@ -177,6 +228,8 @@ private fun CategoryHeader(name: String) {
 private fun ForumSelectItem(
     forum: Forum,
     isSelected: Boolean,
+    isFavorite: Boolean,
+    onFavoriteClick: () -> Unit,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -196,9 +249,8 @@ private fun ForumSelectItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // 板块图标：优先显示 assets 图标，兜底显示首字母
         Box(
@@ -224,6 +276,9 @@ private fun ForumSelectItem(
             }
         }
 
+        Spacer(Modifier.width(14.dp))
+
+        // 名称 + 描述
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 forum.name,
@@ -240,7 +295,26 @@ private fun ForumSelectItem(
             }
         }
 
+        Spacer(Modifier.width(4.dp))
+
+        // 收藏星标
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clickable(onClick = onFavoriteClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
+                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                tint = if (isFavorite) StarColor else MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        // 当前选中标记
         if (isSelected) {
+            Spacer(Modifier.width(4.dp))
             Icon(
                 Icons.Default.Check,
                 contentDescription = "当前选中",
