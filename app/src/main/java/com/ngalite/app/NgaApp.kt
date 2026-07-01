@@ -8,6 +8,7 @@ import coil.memory.MemoryCache
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import com.ngalite.app.data.NgaApi
 import java.util.concurrent.TimeUnit
 
 class NgaApp : Application(), ImageLoaderFactory {
