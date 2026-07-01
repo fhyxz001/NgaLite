@@ -1,9 +1,11 @@
 package com.ngalite.app.data
 
+import com.ngalite.app.NgaApp
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.nio.charset.Charset
@@ -17,11 +19,25 @@ object NgaApi {
     internal const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
+    private val cookieJar by lazy { PersistentCookieJar(NgaApp.instance) }
+
     private val client by lazy {
         OkHttpClient.Builder()
+            .cookieJar(cookieJar)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .build()
+    }
+
+    /** 把登录成功后得到的 Cookie 头字符串注入到持久化 jar，供后续请求携带。 */
+    fun setLoginCookies(cookieHeader: String) {
+        val url = "$BASE/".toHttpUrlOrNull() ?: return
+        cookieJar.saveCookies(url, cookieHeader)
+    }
+
+    /** 清空持久化 jar 中的 Cookie。 */
+    fun clearCookies() {
+        cookieJar.clear()
     }
 
     /** 拉取版块帖子列表 HTML */
@@ -36,7 +52,6 @@ object NgaApi {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", UA)
-            .header("Cookie", CookieStore.get())
             .header("Accept-Charset", "GBK")
             .build()
         client.newCall(req).execute().use { resp ->

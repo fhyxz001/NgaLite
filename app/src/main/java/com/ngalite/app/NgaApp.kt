@@ -14,6 +14,8 @@ class NgaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 把已保存的登录 Cookie 注入 OkHttp CookieJar，避免请求时丢失登录态
+        NgaApi.setLoginCookies(com.ngalite.app.data.CookieStore.get())
     }
 
     /** 配置 Coil 全局图片加载器：内存/磁盘缓存 + 图片复用连接池 */

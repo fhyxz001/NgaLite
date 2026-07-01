@@ -24,7 +24,9 @@ object CookieStore {
     fun get(): String = prefs.getString(KEY_COOKIE, "") ?: ""
 
     fun save(cookie: String) {
-        prefs.edit().putString(KEY_COOKIE, cookie.trim()).apply()
+        val trimmed = cookie.trim()
+        prefs.edit().putString(KEY_COOKIE, trimmed).apply()
+        NgaApi.setLoginCookies(trimmed)
     }
 
     /** 保存账号名（仅用于登录态展示，非登录凭证）。 */
@@ -36,6 +38,7 @@ object CookieStore {
 
     fun clear() {
         prefs.edit().remove(KEY_COOKIE).remove(KEY_ACCOUNT).apply()
+        NgaApi.clearCookies()
     }
 
     fun isLogin(): Boolean = get().isNotEmpty()
