@@ -1,6 +1,7 @@
 package com.ngalite.app.data
 
 import com.ngalite.app.NgaApp
+import okhttp3.ConnectionPool
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
@@ -28,6 +29,17 @@ object NgaApi {
             .readTimeout(20, TimeUnit.SECONDS)
             .build()
     }
+
+    /** 共享连接池，登录等临时请求复用，降低连接建立开销 */
+    private val sharedConnPool = ConnectionPool(4, 1, TimeUnit.MINUTES)
+
+    internal fun loginClient(cookieJar: CookieJar): OkHttpClient =
+        OkHttpClient.Builder()
+            .cookieJar(cookieJar)
+            .connectionPool(sharedConnPool)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
 
     /** 把登录成功后得到的 Cookie 头字符串注入到持久化 jar，供后续请求携带。 */
     fun setLoginCookies(cookieHeader: String) {
@@ -96,13 +108,9 @@ object NgaApi {
             .build()
 
         val jar = MemCookieJar()
-        val loginClient = OkHttpClient.Builder()
-            .cookieJar(jar)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
+        val tempClient = loginClient(jar)
 
-        val loginResp = loginClient.newCall(loginReq).execute()
+        val loginResp = tempClient.newCall(loginReq).execute()
         val bodyBytes = loginResp.body?.bytes() ?: ByteArray(0)
         val body = String(bodyBytes, Charset.forName("GBK"))
         val httpCode = loginResp.code
@@ -122,7 +130,7 @@ object NgaApi {
             .header("Referer", "$BASE/nuke.php?__lib=login&__act=account&login")
             .post(setForm)
             .build()
-        loginClient.newCall(setReq).execute().close()
+        tempClient.newCall(setReq).execute().close()
 
         val cookieHeader = jar.cookieHeader()
         val cookie = if (cookieHeader.isBlank()) {
@@ -379,11 +387,7 @@ object NgaApi {
             private set
 
         private val jar = MemCookieJar()
-        private val client = OkHttpClient.Builder()
-            .cookieJar(jar)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
+        private val client = NgaApi.loginClient(jar)
 
         val imageUrl: String
             get() = "$BASE/login_check_code.php?id=$captchaId&from=$from"
@@ -466,6 +470,17 @@ object NgaApi {
         private fun generateCaptchaId(): String =
             from + Random.nextDouble().toString().substring(2)
     }
+
+    /** 共享的连接池和客户端构建器（登录等无需持久 cookie 的临时请求复用） */
+    private val sharedConnPool = ConnectionPool(4, 1, TimeUnit.MINUTES)
+
+    private fun loginClient(cookieJar: CookieJar): OkHttpClient =
+        OkHttpClient.Builder()
+            .cookieJar(cookieJar)
+            .connectionPool(sharedConnPool)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
 
     /** 临时 CookieJar，用于捕获登录流程中服务端下发的 Set-Cookie。 */
     internal class MemCookieJar : CookieJar {

@@ -20,6 +20,8 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -227,13 +229,16 @@ object ExportManager {
         val document = Jsoup.parse(html)
         val images = document.select("img")
         if (images.isEmpty()) return@withContext html
-        images.forEach { img ->
+        // 并行下载所有外部图片
+        images.map { img ->
             val src = img.attr("src")
-            if (src.isNotBlank() && !src.startsWith("data:")) {
-                runCatching { fetchImageAsDataUrl(src, cookie) }
-                    .onSuccess { img.attr("src", it) }
+            async {
+                if (src.isNotBlank() && !src.startsWith("data:")) {
+                    runCatching { fetchImageAsDataUrl(src, cookie) }
+                        .onSuccess { img.attr("src", it) }
+                }
             }
-        }
+        }.awaitAll()
         document.outerHtml()
     }
 

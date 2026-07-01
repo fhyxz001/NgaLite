@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
@@ -110,11 +111,10 @@ class DetailViewModel : ViewModel() {
             _state.value = DetailUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(tid) }
-                val title = withContext(Dispatchers.Default) { NgaParser.parseThreadTitle(html) }
-                val posts = withContext(Dispatchers.Default) { NgaParser.parsePosts(html) }
-                val originalPost = posts.firstOrNull()
-                val comments = if (posts.isNotEmpty()) posts.drop(1) else emptyList()
-                _state.value = DetailUiState.Success(title, forumName, originalPost, comments)
+                val result = withContext(Dispatchers.Default) { NgaParser.parseDetail(html) }
+                val originalPost = result.posts.firstOrNull()
+                val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
+                _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
             } catch (e: Exception) {
                 _state.value = DetailUiState.Error(e.message ?: "未知错误")
             }
@@ -378,7 +378,7 @@ fun DetailScreen(
                     }
                 }
 
-                itemsIndexed(s.comments, key = { index, _ -> index }) { _, post ->
+                items(s.comments, key = { it.floor + it.author }) { post ->
                     CommentCard(post) { fullScreenImageUrl = it }
                 }
             }
@@ -618,9 +618,20 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
 @Composable
 private fun InlineRichText(nodes: List<ContentNode>) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val emojiCache = remember { mutableMapOf<String, Boolean>() }
+    val emojiExists = remember {
+        // 一次性扫描所有表情目录，避免逐帧阻塞 UI
+        buildSet {
+            for (folder in listOf("ac", "a2", "ng", "pst", "dt", "pg")) {
+                try {
+                    val files = context.assets.list(folder) ?: continue
+                    files.filter { it.endsWith(".png") }.forEach { file ->
+                        add("$folder/${file.removeSuffix(".png")}")
+                    }
+                } catch (_: Exception) { }
+            }
+        }
+    }
 
-    // 过滤纯空白内容
     val hasContent = nodes.any { node ->
         when (node) {
             is ContentNode.Text -> node.text.isNotBlank()
@@ -647,15 +658,7 @@ private fun InlineRichText(nodes: List<ContentNode>) {
                 }
                 is ContentNode.Emoji -> {
                     val key = "${node.folder}/${node.name}"
-                    val exists = emojiCache.getOrPut(key) {
-                        try {
-                            context.assets.open("$key.png").close()
-                            true
-                        } catch (_: Exception) {
-                            false
-                        }
-                    }
-                    if (exists) {
+                    if (key in emojiExists) {
                         AsyncImage(
                             model = "file:///android_asset/$key.png",
                             contentDescription = node.name,

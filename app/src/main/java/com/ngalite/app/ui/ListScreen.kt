@@ -39,8 +39,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,6 +64,8 @@ import com.ngalite.app.data.Topic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -210,21 +212,22 @@ fun ListScreen(
         }
     }
 
-    // 检测是否滚动到底部
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            val totalItems = listState.layoutInfo.totalItemsCount
-            lastVisibleItem >= totalItems - 3 && totalItems > 0
-        }
-    }
-
-    // 触发加载更多
+    // 滚动到底部时自动加载更多
     val currentState = state
-    if (shouldLoadMore && currentState is ListUiState.Success && currentState.hasMore && !currentState.isLoadingMore) {
-        LaunchedEffect(Unit) {
-            vm.loadMore()
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalItems = info.totalItemsCount
+            lastVisible to totalItems
         }
+            .filter { (last, total) -> last >= total - 3 && total > 0 }
+            .drop(1) // 跳过初始值
+            .collect {
+                if (currentState is ListUiState.Success && currentState.hasMore && !currentState.isLoadingMore) {
+                    vm.loadMore()
+                }
+            }
     }
 
     Scaffold(

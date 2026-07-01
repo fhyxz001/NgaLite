@@ -7,12 +7,35 @@ object NgaParser {
 
     private val TID_REGEX = Regex("""tid=(\d+)""")
 
+    companion object {
+        private val BR_REGEX = """(?i)<br\s*/?>""".toRegex()
+        private val P_REGEX = """(?i)</p>""".toRegex()
+        private val DIV_REGEX = """(?i)</div>""".toRegex()
+        private val TAG_REGEX = """(?i)<[^>]+>""".toRegex()
+        private val MULTI_NEWLINE = """\n{3,}""".toRegex()
+        private val VIEWS_REGEX = Regex("""浏览\s*[：:]?\s*([+\-]?\d+)""")
+        private val LIKES_REGEX = Regex("""赞\s*[（(]?\s*([+\-]?\d+)\s*[）)]?""")
+        private val NUM_CLEAN = Regex("[^0-9-]")
+        private val TITLE_CLEAN = Regex("""\s*NGA.*$""")
+    }
+
+    /** 从已解析的文档中提取标题 */
+    private fun extractTitle(doc: org.jsoup.nodes.Document): String {
+        return doc.title().replace(TITLE_CLEAN, "").trim().ifBlank { "NGA帖子" }
+    }
+
     /** 解析帖子标题（来自 <title>，去掉 " NGA玩家社区 P1" 后缀） */
-    fun parseThreadTitle(html: String): String {
+    fun parseThreadTitle(html: String): String = extractTitle(Jsoup.parse(html))
+
+    /** 帖子详情解析结果 */
+    data class DetailResult(val title: String, val posts: List<Post>)
+
+    /** 一步完成标题 + 帖子内容解析（仅一次 Jsoup.parse） */
+    fun parseDetail(html: String): DetailResult {
         val doc = Jsoup.parse(html)
-        val raw = doc.title().trim()
-        // 形如 "爸妈老年散财碎碎念 NGA玩家社区 P1"
-        return raw.substringBefore(" NGA").trim().ifBlank { "NGA帖子" }
+        val title = extractTitle(doc)
+        val posts = parsePostsFromDoc(doc)
+        return DetailResult(title, posts)
     }
 
     /** 解析帖子列表 */
@@ -32,8 +55,9 @@ object NgaParser {
     }
 
     /** 解析帖子详情（楼层列表） */
-    fun parsePosts(html: String): List<Post> {
-        val doc = Jsoup.parse(html)
+    fun parsePosts(html: String): List<Post> = parsePostsFromDoc(Jsoup.parse(html))
+
+    private fun parsePostsFromDoc(doc: org.jsoup.nodes.Document): List<Post> {
         val rows = doc.select("tr.postrow")
         return rows.mapIndexedNotNull { index, row ->
             val author = row.selectFirst("[id^=postauthor]")?.text()?.trim() ?: ""
@@ -51,25 +75,23 @@ object NgaParser {
     /** 从楼层行解析浏览数 */
     private fun parseViews(row: org.jsoup.nodes.Element): String {
         row.select("[id^=postview]").firstOrNull()?.text()?.trim()?.let { num ->
-            val cleaned = num.replace(Regex("[^0-9-]"), "")
+            val cleaned = num.replace(NUM_CLEAN, "")
             if (cleaned.isNotBlank()) return cleaned
         }
         val text = row.text()
-        val match = Regex("""浏览\s*[：:]?\s*([+\-]?\d+)""").find(text)
+        val match = VIEWS_REGEX.find(text)
         if (match != null) return match.groupValues[1]
         return "0"
     }
 
     /** 从楼层行解析点赞数 */
     private fun parseLikes(row: org.jsoup.nodes.Element): String {
-        // 尝试匹配常见格式: "赞 (123)" 或 "已被赞 X 次" 或数字文本
         row.select("[id^=likes_num]").firstOrNull()?.text()?.trim()?.let { num ->
-            val cleaned = num.replace(Regex("[^0-9-]"), "")
+            val cleaned = num.replace(NUM_CLEAN, "")
             if (cleaned.isNotBlank()) return cleaned
         }
-        // 尝试从文本中提取 "赞 (N)" 或 "赞 N"
         val likeText = row.text()
-        val match = Regex("""赞\s*[（(]?\s*([+\-]?\d+)\s*[）)]?""").find(likeText)
+        val match = LIKES_REGEX.find(likeText)
         if (match != null) return match.groupValues[1]
         return "0"
     }
@@ -77,17 +99,17 @@ object NgaParser {
     /** HTML 转纯文本：保留换行，剥离标签与实体（保留 UBB 标签） */
     private fun htmlToText(html: String): String {
         return html
-            .replace("(?i)<br\\s*/?>".toRegex(), "\n")
-            .replace("(?i)</p>".toRegex(), "\n\n")
-            .replace("(?i)</div>".toRegex(), "\n")
-            .replace("(?i)<[^>]+>".toRegex(), "")
+            .replace(BR_REGEX, "\n")
+            .replace(P_REGEX, "\n\n")
+            .replace(DIV_REGEX, "\n")
+            .replace(TAG_REGEX, "")
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&quot;", "\"")
             .replace("&#39;", "'")
-            .replace("\n{3,}".toRegex(), "\n\n")
+            .replace(MULTI_NEWLINE, "\n\n")
             .trim()
     }
 }

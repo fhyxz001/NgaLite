@@ -89,7 +89,10 @@ fun LoginDialog(onDismiss: () -> Unit) {
         scope.launch {
             try {
                 val bytes = withContext(Dispatchers.IO) { session.fetchImageBytes() }
-                captchaBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size).asImageBitmap()
+                val bmp = withContext(Dispatchers.Default) {
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+                captchaBitmap = bmp?.asImageBitmap()
             } catch (_: Exception) {
                 captchaBitmap = null
             } finally {
