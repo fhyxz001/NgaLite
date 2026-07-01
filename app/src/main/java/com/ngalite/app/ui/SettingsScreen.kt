@@ -151,7 +151,7 @@ fun SettingsScreen(
             Card(
                 onClick = { triggerCheckUpdate() },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
             ) {
@@ -200,7 +200,7 @@ fun SettingsScreen(
             Card(
                 onClick = { showLogin = true },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
             ) {

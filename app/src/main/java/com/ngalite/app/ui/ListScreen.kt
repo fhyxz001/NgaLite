@@ -318,7 +318,7 @@ fun ListScreen(
             is ListUiState.Success -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(s.topics, key = { it.tid }) { topic ->
@@ -390,7 +390,7 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
     ) {
