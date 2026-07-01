@@ -56,8 +56,7 @@ fun NavGraph() {
                 onTopicClick = { tid ->
                     navigateOnce(Routes.detail(tid))
                 },
-                onSettingsClick = { navigateOnce(Routes.SETTINGS) },
-                onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
+                onSettingsClick = { navigateOnce(Routes.SETTINGS) }
             )
         }
         composable(Routes.FORUM_SELECT) {
@@ -82,7 +81,8 @@ fun NavGraph() {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { nav.popBackStack() },
-                onLoginClick = { nav.navigate(Routes.LOGIN_WEB) }
+                onLoginClick = { nav.navigate(Routes.LOGIN_WEB) },
+                onForumManageClick = { navigateOnce(Routes.FORUM_SELECT) }
             )
         }
         composable(Routes.LOGIN_WEB) {

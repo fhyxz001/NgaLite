@@ -13,19 +13,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.Forum
+import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
@@ -229,14 +238,24 @@ class ListViewModel : ViewModel() {
 fun ListScreen(
     onTopicClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
-    onForumSelectClick: () -> Unit,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
     var showLoginDialog by remember { mutableStateOf(false) }
+    var showForumDropdown by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
+
+    // 板块分类列表（用于下拉菜单）
+    var categories by remember { mutableStateOf<List<ForumCategory>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            ForumRepository.load(context)
+        }
+        categories = ForumRepository.categories
+    }
 
     /** 读取剪贴板中的 NGA 帖子链接并跳转 */
     fun readClipboardAndOpen() {
@@ -284,20 +303,79 @@ fun ListScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    TextButton(
-                        onClick = onForumSelectClick,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            currentForum.name,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = "选择板块",
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
+                    Box {
+                        TextButton(
+                            onClick = { showForumDropdown = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                currentForum.name,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = "选择板块",
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showForumDropdown,
+                            onDismissRequest = { showForumDropdown = false },
+                            modifier = Modifier.heightIn(max = 420.dp)
+                        ) {
+                            val scrollState = rememberScrollState()
+                            Column(modifier = Modifier.verticalScroll(scrollState)) {
+                                categories.forEach { category ->
+                                    // 分类标题
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            category.name,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    // 该分类下的板块
+                                    category.forums.forEach { forum ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text(
+                                                        forum.name,
+                                                        color = if (forum.fid == currentForum.fid)
+                                                            MaterialTheme.colorScheme.primary
+                                                        else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                showForumDropdown = false
+                                                vm.switchForum(forum)
+                                            },
+                                            trailingIcon = if (forum.fid == currentForum.fid) {
+                                                {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            } else null
+                                        )
+                                    }
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 },
                 actions = {
