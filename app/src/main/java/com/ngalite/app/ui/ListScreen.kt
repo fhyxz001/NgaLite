@@ -100,19 +100,37 @@ class ListViewModel : ViewModel() {
     /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
     private var generation = 0L
 
+    /** switchForum 防抖时间戳，避免快速连续切换导致状态错乱 */
+    private var lastSwitchTime = 0L
+    private val switchDebounceMs = 200L
+
     init {
         viewModelScope.launch {
-            ForumRepository.ensureLoaded(NgaApp.instance)
-            val first = ForumRepository.allForums.first()
+            // 在 IO 线程加载板块数据，避免阻塞主线程
+            ForumRepository.ensureLoadedAsync(NgaApp.instance)
+            val all = ForumRepository.allForums
+            if (all.isEmpty()) {
+                _state.value = ListUiState.Error("板块数据加载失败")
+                return@launch
+            }
+            // 此处 all 必非空，firstOrNull 仅用于防御性编程
+            val first = all.firstOrNull() ?: run {
+                _state.value = ListUiState.Error("板块数据加载失败")
+                return@launch
+            }
             fid = first.fid
             _currentForum.value = first
-            lastAccessibleForum = ForumRepository.allForums.first { !it.requiresLogin() }
+            lastAccessibleForum = all.firstOrNull { !it.requiresLogin() }
             load()
         }
     }
 
     fun switchForum(forum: Forum) {
         if (forum.fid == fid) return
+        // 防抖：快速连续切换时只执行最后一次，避免叠加触发 load 与导航竞态
+        val now = System.currentTimeMillis()
+        if (now - lastSwitchTime < switchDebounceMs) return
+        lastSwitchTime = now
         if (!forum.requiresLogin()) {
             lastAccessibleForum = forum
         }
@@ -149,7 +167,8 @@ class ListViewModel : ViewModel() {
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
                 if (myGen != generation) return@launch
-                val newTopics = NgaParser.parseTopicList(html)
+                // 按 tid 去重，避免 NGA 单页返回重复帖子导致 LazyColumn 重复 key 崩溃
+                val newTopics = NgaParser.parseTopicList(html).distinctBy { it.tid }
                 if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
@@ -178,7 +197,9 @@ class ListViewModel : ViewModel() {
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
                 if (myGen != generation) return@launch
-                val newTopics = NgaParser.parseTopicList(html)
+                // 过滤掉已存在的 tid（NGA 置顶帖在每页都会重复出现），避免 LazyColumn 重复 key 崩溃
+                val existingTids = snapshot.mapTo(mutableSetOf()) { it.tid }
+                val newTopics = NgaParser.parseTopicList(html).filter { it.tid !in existingTids }
                 if (myGen != generation) return@launch
                 topics = snapshot + newTopics
                 currentPage = nextPage
@@ -220,13 +241,24 @@ fun ListScreen(
     /** 读取剪贴板中的 NGA 帖子链接并跳转 */
     fun readClipboardAndOpen() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+        // primaryClip 可能为 null 或 itemCount 为 0，直接 getItemAt(0) 会越界崩溃
+        val clip = clipboard.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+        } else ""
         val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
         val match = regex.find(text)
         if (match != null) {
             onTopicClick(match.groupValues[1])
         } else {
             Toast.makeText(context, "剪贴板中没有 NGA 帖子链接", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 切换板块后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 或显示异常
+    LaunchedEffect(currentForum) {
+        if (listState.layoutInfo.totalItemsCount > 0) {
+            listState.scrollToItem(0)
         }
     }
 

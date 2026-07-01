@@ -2,6 +2,8 @@ package com.ngalite.app.ui
 
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,13 @@ fun NavGraph() {
         }
     }
 
+    /**
+     * 安全获取指定路由的 backStackEntry。
+     * 在进程恢复、配置变化等边界场景下 [androidx.navigation.NavController.getBackStackEntry]
+     * 可能抛 IllegalArgumentException，这里用 runCatching 兜底，失败时返回 null。
+     */
+    fun safeListEntry() = runCatching { nav.getBackStackEntry(Routes.LIST) }.getOrNull()
+
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) { backStackEntry ->
             val vm: ListViewModel = viewModel(backStackEntry)
@@ -51,17 +60,24 @@ fun NavGraph() {
                 onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
             )
         }
-        composable(Routes.FORUM_SELECT) { backStackEntry ->
-            val listEntry = nav.getBackStackEntry(Routes.LIST)
-            val vm: ListViewModel = viewModel(listEntry)
-            ForumSelectScreen(
-                currentForum = vm.currentForum.value,
-                onBack = { nav.popBackStack() },
-                onForumSelected = { forum ->
-                    vm.switchForum(forum)
-                    nav.popBackStack()
-                }
-            )
+        composable(Routes.FORUM_SELECT) {
+            // 若拿不到 LIST entry（边界场景，如进程恢复），用 LaunchedEffect 安全返回上一页
+            val listEntry = safeListEntry()
+            if (listEntry == null) {
+                LaunchedEffect(Unit) { nav.popBackStack() }
+            } else {
+                val vm: ListViewModel = viewModel(listEntry)
+                // 用 collectAsState 响应式订阅当前板块，避免读到瞬态旧值
+                val currentForum by vm.currentForum.collectAsState()
+                ForumSelectScreen(
+                    currentForum = currentForum,
+                    onBack = { nav.popBackStack() },
+                    onForumSelected = { forum ->
+                        vm.switchForum(forum)
+                        nav.popBackStack()
+                    }
+                )
+            }
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
@@ -80,9 +96,10 @@ fun NavGraph() {
         ) { backStackEntry ->
             val tid = backStackEntry.arguments?.getString("tid").orEmpty()
             // 从 ListViewModel 获取当前板块名称，避免通过路由传递（消除 URL 编码问题）
-            val listEntry = nav.getBackStackEntry(Routes.LIST)
-            val listVm: ListViewModel = viewModel(listEntry)
-            val forumName = listVm.currentForum.value.name
+            val listEntry = safeListEntry()
+            val forumName = if (listEntry != null) {
+                viewModel<ListViewModel>(listEntry).currentForum.value.name
+            } else ""
             DetailScreen(tid = tid, forumName = forumName, onBack = { nav.popBackStack() })
         }
     }

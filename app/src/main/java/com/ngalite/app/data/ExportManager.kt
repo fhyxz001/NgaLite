@@ -470,6 +470,7 @@ object ExportManager {
 
     /**
      * 通过系统打印对话框输出 PDF，内容已适配手机屏幕宽度。
+     * 打印任务结束后自动销毁 WebView，避免内存泄漏。
      */
     fun printPdf(context: Context, jobName: String, html: String) {
         val webView = WebView(context).apply {
@@ -488,7 +489,14 @@ object ExportManager {
                     .setResolution(PrintAttributes.Resolution("default", "default", 300, 300))
                     .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                     .build()
+                // 打印任务开始后延迟销毁 WebView：打印框架在 layout 阶段仍需访问 WebView
                 printManager.print(jobName, adapter, attrs)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    runCatching {
+                        webView.stopLoading()
+                        webView.destroy()
+                    }
+                }, 5000L)
             }
         }
         webView.loadDataWithBaseURL("https://bbs.nga.cn", html, "text/html", "UTF-8", null)

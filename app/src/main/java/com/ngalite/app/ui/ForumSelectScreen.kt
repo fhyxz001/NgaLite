@@ -52,6 +52,8 @@ import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val StarColor = Color(0xFFFFC107)
 
@@ -80,9 +82,14 @@ fun ForumSelectScreen(
     var categories by remember { mutableStateOf<List<ForumCategory>>(emptyList()) }
     var favoriteFids by remember { mutableStateOf(FavoriteStore.getFavorites()) }
 
-    // 异步加载板块数据
+    // 点击防抖：避免快速连点触发多次导航/切换
+    var lastClickTime by remember { mutableStateOf(0L) }
+
+    // 异步加载板块数据：在 IO 线程读取 assets，避免阻塞主线程
     LaunchedEffect(Unit) {
-        ForumRepository.load(context)
+        withContext(Dispatchers.IO) {
+            ForumRepository.load(context)
+        }
         categories = ForumRepository.categories
     }
 
@@ -96,6 +103,14 @@ fun ForumSelectScreen(
     fun toggleFavorite(fid: String) {
         FavoriteStore.toggle(fid)
         favoriteFids = FavoriteStore.getFavorites()
+    }
+
+    // 板块点击防抖包装：点击后 400ms 内忽略后续点击，避免快速连点叠加导航
+    fun handleForumClick(forum: Forum) {
+        val now = System.currentTimeMillis()
+        if (now - lastClickTime < 400L) return
+        lastClickTime = now
+        onForumSelected(forum)
     }
 
     val filteredCategories = remember(searchQuery, categories) {
@@ -183,7 +198,7 @@ fun ForumSelectScreen(
                         isSelected = forum.fid == currentForum.fid,
                         isFavorite = true,
                         onFavoriteClick = { toggleFavorite(forum.fid) },
-                        onClick = { onForumSelected(forum) }
+                        onClick = { handleForumClick(forum) }
                     )
                     if (index < favoriteForums.lastIndex) {
                         HorizontalDivider(
@@ -213,7 +228,7 @@ fun ForumSelectScreen(
                         isSelected = forum.fid == currentForum.fid,
                         isFavorite = forum.fid in favoriteFids,
                         onFavoriteClick = { toggleFavorite(forum.fid) },
-                        onClick = { onForumSelected(forum) }
+                        onClick = { handleForumClick(forum) }
                     )
                     if (index < category.forums.lastIndex) {
                         HorizontalDivider(
