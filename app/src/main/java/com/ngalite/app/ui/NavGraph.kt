@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -12,8 +11,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 object Routes {
     const val LIST = "list"
@@ -27,14 +24,19 @@ object Routes {
 @Composable
 fun NavGraph() {
     val nav = rememberNavController()
-    val scope = rememberCoroutineScope()
-    var navLock by remember { mutableStateOf(false) }
+    var lastNavTime by remember { mutableStateOf(0L) }
+    val minNavInterval = 800L
 
     fun navigateOnce(route: String) {
-        if (navLock) return
-        navLock = true
-        runCatching { nav.navigate(route) }
-        scope.launch { delay(400); navLock = false }
+        val now = System.currentTimeMillis()
+        if (now - lastNavTime < minNavInterval) return
+        lastNavTime = now
+        runCatching {
+            nav.navigate(route) {
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
     }
 
     NavHost(navController = nav, startDestination = Routes.LIST) {

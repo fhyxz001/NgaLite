@@ -104,18 +104,26 @@ class DetailViewModel : ViewModel() {
     private var currentTid: String = ""
     private var currentForumName: String = ""
 
+    /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
+    private var loadGeneration = 0L
+
     fun load(tid: String, forumName: String = "") {
         currentTid = tid
         currentForumName = forumName
+        val myGen = ++loadGeneration
         viewModelScope.launch {
             _state.value = DetailUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(tid) }
+                if (myGen != loadGeneration) return@launch
                 val result = withContext(Dispatchers.Default) { NgaParser.parseDetail(html) }
+                if (myGen != loadGeneration) return@launch
                 val originalPost = result.posts.firstOrNull()
                 val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
                 _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (myGen != loadGeneration) return@launch
                 _state.value = DetailUiState.Error(e.message ?: "未知错误")
             }
         }

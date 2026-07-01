@@ -100,6 +100,9 @@ class ListViewModel : ViewModel() {
     private var loadJob: kotlinx.coroutines.Job? = null
     private var loadMoreJob: kotlinx.coroutines.Job? = null
 
+    /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
+    private var generation = 0L
+
     init {
         viewModelScope.launch {
             ForumRepository.ensureLoaded(NgaApp.instance)
@@ -142,15 +145,21 @@ class ListViewModel : ViewModel() {
             _state.value = ListUiState.LoginRequired(forum.name)
             return
         }
+        // 在协程外设置 Loading 状态，避免被旧协程 catch 块覆盖
+        _state.value = ListUiState.Loading
+        val myGen = ++generation
         loadJob = viewModelScope.launch {
-            _state.value = ListUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
+                if (myGen != generation) return@launch
                 val newTopics = NgaParser.parseTopicList(html)
+                if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
                 _state.value = ListUiState.Success(topics = topics)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (myGen != generation) return@launch
                 _state.value = ListUiState.Error(e.message ?: "未知错误")
             }
         }
@@ -158,6 +167,7 @@ class ListViewModel : ViewModel() {
 
     fun loadMore() {
         if (isLoadingMore || !hasMore) return
+        val myGen = generation
         loadMoreJob?.cancel()
         isLoadingMore = true
         val nextPage = currentPage + 1
@@ -170,7 +180,9 @@ class ListViewModel : ViewModel() {
             )
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
+                if (myGen != generation) return@launch
                 val newTopics = NgaParser.parseTopicList(html)
+                if (myGen != generation) return@launch
                 topics = snapshot + newTopics
                 currentPage = nextPage
                 hasMore = newTopics.isNotEmpty()
@@ -181,6 +193,8 @@ class ListViewModel : ViewModel() {
                     hasMore = hasMore
                 )
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (myGen != generation) return@launch
                 isLoadingMore = false
                 _state.value = ListUiState.Success(
                     topics = topics,
