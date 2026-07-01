@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Topic
@@ -73,6 +75,7 @@ sealed interface ListUiState {
     ) : ListUiState
 
     data class Error(val message: String) : ListUiState
+    data class LoginRequired(val forumName: String) : ListUiState
 }
 
 data class Forum(val fid: String, val name: String)
@@ -91,6 +94,9 @@ private val FORUMS = listOf(
     Forum("510558", "洛克王国世界"),
 )
 
+private val LOGIN_REQUIRED_FIDS = setOf("-7", "-7955747")
+private fun Forum.requiresLogin(): Boolean = fid in LOGIN_REQUIRED_FIDS
+
 class ListViewModel : ViewModel() {
     private var fid = FORUMS.first().fid
     private val _state = MutableStateFlow<ListUiState>(ListUiState.Loading)
@@ -103,13 +109,26 @@ class ListViewModel : ViewModel() {
 
     private val _currentForum = MutableStateFlow(FORUMS.first())
     val currentForum: StateFlow<Forum> = _currentForum
+    private var lastAccessibleForum: Forum = FORUMS.first { !it.requiresLogin() }
 
     init { load() }
 
     fun switchForum(forum: Forum) {
         if (forum.fid == fid) return
+        if (!forum.requiresLogin()) {
+            lastAccessibleForum = forum
+        }
         fid = forum.fid
         _currentForum.value = forum
+        load()
+    }
+
+    /** 取消登录后回到上次无需登录的板块 */
+    fun revertFromLoginRequired() {
+        if (_currentForum.value.requiresLogin()) {
+            fid = lastAccessibleForum.fid
+            _currentForum.value = lastAccessibleForum
+        }
         load()
     }
 
@@ -117,6 +136,11 @@ class ListViewModel : ViewModel() {
         currentPage = 1
         hasMore = true
         allTopics.clear()
+        val forum = _currentForum.value
+        if (forum.requiresLogin() && !CookieStore.isLogin()) {
+            _state.value = ListUiState.LoginRequired(forum.name)
+            return
+        }
         viewModelScope.launch {
             _state.value = ListUiState.Loading
             try {
@@ -175,6 +199,7 @@ fun ListScreen(
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
     var showForumMenu by remember { mutableStateOf(false) }
+    var showLoginDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
@@ -296,6 +321,22 @@ fun ListScreen(
                 }
             }
 
+            is ListUiState.LoginRequired -> Column(
+                Modifier.fillMaxSize().padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "访问 ${s.forumName} 需要登录",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { showLoginDialog = true }) {
+                    Text("登录")
+                }
+            }
+
             is ListUiState.Success -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -338,6 +379,13 @@ fun ListScreen(
                     }
                 }
             }
+        }
+
+        if (showLoginDialog) {
+            LoginDialog(onDismiss = {
+                showLoginDialog = false
+                if (CookieStore.isLogin()) vm.load() else vm.revertFromLoginRequired()
+            })
         }
     }
 }

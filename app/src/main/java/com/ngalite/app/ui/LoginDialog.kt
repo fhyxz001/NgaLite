@@ -17,12 +17,14 @@ import androidx.compose.foundation.text.KeyboardOptions as KeyboardOpts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -111,18 +113,39 @@ fun LoginDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
 
                 // 账号类型
-                Text(
-                    "账号类型",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                ACCOUNT_TYPES.forEachIndexed { i, t ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = i == typeIndex,
-                            onClick = { typeIndex = i }
-                        )
-                        Text(t.label, style = MaterialTheme.typography.bodySmall)
+                var accountTypeExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = accountTypeExpanded,
+                    onExpandedChange = { accountTypeExpanded = !accountTypeExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = ACCOUNT_TYPES[typeIndex].label,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("账号类型") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountTypeExpanded)
+                        },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = accountTypeExpanded,
+                        onDismissRequest = { accountTypeExpanded = false }
+                    ) {
+                        ACCOUNT_TYPES.forEachIndexed { i, t ->
+                            DropdownMenuItem(
+                                text = { Text(t.label) },
+                                onClick = {
+                                    typeIndex = i
+                                    accountTypeExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
