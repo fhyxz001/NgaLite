@@ -29,8 +29,8 @@ object ForumRepository {
 
         for (key in root.keys()) {
             val arr = root.getJSONArray(key)
-            val forumList = arr.map<_, Forum> { obj ->
-                val o = obj as org.json.JSONObject
+            val forumList = (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
                 Forum(
                     fid = o.getInt("id").toString(),
                     name = o.getString("name"),
