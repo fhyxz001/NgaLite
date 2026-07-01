@@ -97,6 +97,7 @@ class ListViewModel : ViewModel() {
     private val _currentForum = MutableStateFlow(Forum("", "加载中"))
     val currentForum: StateFlow<Forum> = _currentForum
     private var lastAccessibleForum: Forum? = null
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -270,16 +271,15 @@ fun ListScreen(
         }
     ) { padding ->
         when (val s = state) {
-            is ListUiState.Loading -> Column(
-                Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            is ListUiState.Loading -> Box(
+                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
             is ListUiState.Error -> Column(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -295,7 +295,7 @@ fun ListScreen(
             }
 
             is ListUiState.LoginRequired -> Column(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {

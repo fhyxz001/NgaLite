@@ -110,9 +110,19 @@ fun ForumSelectScreen(
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("搜索板块") },
+                            placeholder = { Text("搜索板块", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                cursorColor = MaterialTheme.colorScheme.onPrimary,
+                                focusedBorderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f),
+                            )
                         )
                     } else {
                         Text("板块选择")

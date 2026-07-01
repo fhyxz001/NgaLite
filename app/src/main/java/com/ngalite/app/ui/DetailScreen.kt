@@ -303,14 +303,13 @@ fun DetailScreen(
         }
     ) { padding ->
         when (val s = state) {
-            is DetailUiState.Loading -> Column(
-                Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            is DetailUiState.Loading -> Box(
+                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
             ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
 
             is DetailUiState.Error -> Column(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
