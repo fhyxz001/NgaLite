@@ -13,6 +13,7 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import com.ngalite.app.data.ForumRepository
+import com.ngalite.app.data.NgaApi
 
 class NgaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
