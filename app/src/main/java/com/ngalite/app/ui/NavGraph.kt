@@ -33,17 +33,18 @@ fun NavGraph() {
     fun navigateOnce(route: String) {
         if (navLock) return
         navLock = true
-        nav.navigate(route)
-        scope.launch { delay(200); navLock = false }
+        runCatching { nav.navigate(route) }
+        scope.launch { delay(400); navLock = false }
     }
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) { backStackEntry ->
             val vm: ListViewModel = viewModel(backStackEntry)
-            val currentName = vm.currentForum.value.name
             ListScreen(
                 vm = vm,
-                onTopicClick = { tid -> navigateOnce(Routes.detail(tid, currentName)) },
+                onTopicClick = { tid ->
+                    navigateOnce(Routes.detail(tid, vm.currentForum.value.name))
+                },
                 onSettingsClick = { navigateOnce(Routes.SETTINGS) },
                 onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
             )

@@ -92,7 +92,7 @@ class ListViewModel : ViewModel() {
     private var currentPage = 1
     private var hasMore = true
     private var isLoadingMore = false
-    private val allTopics = mutableListOf<Topic>()
+    private var topics: List<Topic> = emptyList()
 
     private val _currentForum = MutableStateFlow(Forum("", "加载中"))
     val currentForum: StateFlow<Forum> = _currentForum
@@ -133,7 +133,7 @@ class ListViewModel : ViewModel() {
     fun load() {
         currentPage = 1
         hasMore = true
-        allTopics.clear()
+        topics = emptyList()
         loadJob?.cancel()
         loadMoreJob?.cancel()
         isLoadingMore = false
@@ -146,10 +146,10 @@ class ListViewModel : ViewModel() {
             _state.value = ListUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
-                val topics = NgaParser.parseTopicList(html)
-                allTopics.addAll(topics)
-                hasMore = topics.isNotEmpty()
-                _state.value = ListUiState.Success(topics = allTopics.toList())
+                val newTopics = NgaParser.parseTopicList(html)
+                topics = newTopics
+                hasMore = newTopics.isNotEmpty()
+                _state.value = ListUiState.Success(topics = topics)
             } catch (e: Exception) {
                 _state.value = ListUiState.Error(e.message ?: "未知错误")
             }
@@ -161,28 +161,29 @@ class ListViewModel : ViewModel() {
         loadMoreJob?.cancel()
         isLoadingMore = true
         val nextPage = currentPage + 1
+        val snapshot = topics
         loadMoreJob = viewModelScope.launch {
             _state.value = ListUiState.Success(
-                topics = allTopics.toList(),
+                topics = snapshot,
                 isLoadingMore = true,
                 hasMore = hasMore
             )
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
-                val topics = NgaParser.parseTopicList(html)
-                allTopics.addAll(topics)
+                val newTopics = NgaParser.parseTopicList(html)
+                topics = snapshot + newTopics
                 currentPage = nextPage
-                hasMore = topics.isNotEmpty()
+                hasMore = newTopics.isNotEmpty()
                 isLoadingMore = false
                 _state.value = ListUiState.Success(
-                    topics = allTopics.toList(),
+                    topics = topics,
                     isLoadingMore = false,
                     hasMore = hasMore
                 )
             } catch (e: Exception) {
                 isLoadingMore = false
                 _state.value = ListUiState.Success(
-                    topics = allTopics.toList(),
+                    topics = topics,
                     isLoadingMore = false,
                     hasMore = hasMore
                 )
