@@ -15,6 +15,7 @@ data class Post(
     val author: String,
     val date: String,
     val likes: String = "0",
+    val views: String = "0",
     val contentNodes: List<ContentNode>
 )
 

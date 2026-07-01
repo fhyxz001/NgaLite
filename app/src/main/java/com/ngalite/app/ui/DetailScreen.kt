@@ -25,21 +25,27 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Html
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,7 +86,13 @@ import kotlinx.coroutines.withContext
 
 sealed interface DetailUiState {
     data object Loading : DetailUiState
-    data class Success(val title: String, val posts: List<Post>) : DetailUiState
+    data class Success(
+        val title: String,
+        val forumName: String,
+        val originalPost: Post?,
+        val comments: List<Post>
+    ) : DetailUiState
+
     data class Error(val message: String) : DetailUiState
 }
 
@@ -89,16 +101,20 @@ class DetailViewModel : ViewModel() {
     val state: StateFlow<DetailUiState> = _state
 
     private var currentTid: String = ""
+    private var currentForumName: String = ""
 
-    fun load(tid: String) {
+    fun load(tid: String, forumName: String = "") {
         currentTid = tid
+        currentForumName = forumName
         viewModelScope.launch {
             _state.value = DetailUiState.Loading
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(tid) }
                 val title = withContext(Dispatchers.Default) { NgaParser.parseThreadTitle(html) }
                 val posts = withContext(Dispatchers.Default) { NgaParser.parsePosts(html) }
-                _state.value = DetailUiState.Success(title, posts)
+                val originalPost = posts.firstOrNull()
+                val comments = if (posts.isNotEmpty()) posts.drop(1) else emptyList()
+                _state.value = DetailUiState.Success(title, forumName, originalPost, comments)
             } catch (e: Exception) {
                 _state.value = DetailUiState.Error(e.message ?: "未知错误")
             }
@@ -109,9 +125,10 @@ class DetailViewModel : ViewModel() {
         if (currentTid.isBlank()) "" else "https://bbs.nga.cn/read.php?tid=$currentTid"
 
     private fun exportContent(): ExportManager.ExportContent? =
-        (state.value as? DetailUiState.Success)?.let {
-            val sorted = it.posts.sortedByDescending { p -> p.likes.toIntOrNull() ?: 0 }.take(10)
-            ExportManager.ExportContent(it.title, sorted, postUrl())
+        (state.value as? DetailUiState.Success)?.let { success ->
+            val allPosts = listOfNotNull(success.originalPost) + success.comments
+            val sorted = allPosts.sortedByDescending { p -> p.likes.toIntOrNull() ?: 0 }.take(10)
+            ExportManager.ExportContent(success.title, sorted, postUrl())
         }
 
     /** 复制 Markdown 到剪贴板 */
@@ -206,15 +223,17 @@ class DetailViewModel : ViewModel() {
 @Composable
 fun DetailScreen(
     tid: String,
+    forumName: String,
     onBack: () -> Unit,
     vm: DetailViewModel = viewModel()
 ) {
-    LaunchedEffect(tid) { vm.load(tid) }
+    LaunchedEffect(tid, forumName) { vm.load(tid, forumName) }
     val state by vm.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var showTopMenu by remember { mutableStateOf(false) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -241,26 +260,45 @@ fun DetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    val title = (state as? DetailUiState.Success)?.title ?: "帖子详情"
-                    Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                },
+                title = { Text("帖子详情") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.load(tid) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    Box {
+                        IconButton(onClick = { showTopMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(
+                            expanded = showTopMenu,
+                            onDismissRequest = { showTopMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("刷新") },
+                                onClick = {
+                                    showTopMenu = false
+                                    vm.load(tid, forumName)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("导出 / 分享") },
+                                enabled = state is DetailUiState.Success && !isExporting,
+                                onClick = {
+                                    showTopMenu = false
+                                    showExportDialog = true
+                                }
+                            )
+                        }
                     }
-                    IconButton(
-                        onClick = { showExportDialog = true },
-                        enabled = state is DetailUiState.Success && !isExporting
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = "导出/分享")
-                    }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { padding ->
@@ -282,7 +320,7 @@ fun DetailScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(Modifier.height(12.dp))
-                TextButton(onClick = { vm.load(tid) }) {
+                TextButton(onClick = { vm.load(tid, forumName) }) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
                     Text("重试")
@@ -293,14 +331,55 @@ fun DetailScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                itemsIndexed(s.posts, key = { index, _ -> index }) { _, post ->
-                    PostItem(post) { fullScreenImageUrl = it }
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        thickness = 0.5.dp
+                if (s.forumName.isNotBlank()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Text(
+                                s.forumName,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        s.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
+                }
+
+                s.originalPost?.let { post ->
+                    item {
+                        OriginalPostCard(post) { fullScreenImageUrl = it }
+                    }
+                }
+
+                if (s.comments.isNotEmpty()) {
+                    item {
+                        Text(
+                            "全部评论",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)
+                        )
+                    }
+                }
+
+                itemsIndexed(s.comments, key = { index, _ -> index }) { _, post ->
+                    CommentCard(post) { fullScreenImageUrl = it }
                 }
             }
         }
@@ -366,39 +445,86 @@ fun DetailScreen(
 }
 
 @Composable
-private fun PostItem(post: Post, onImageClick: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-        androidx.compose.foundation.layout.Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                post.author,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            PostContent(post.contentNodes, onImageClick)
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
             )
+
             Text(
-                post.date,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                "${post.date} · 楼主${if (post.views != "0") " · ${post.views} 浏览" else ""}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // 点赞数
-            if (post.likes != "0") {
+        }
+    }
+}
+
+@Composable
+private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
-                    "赞 ${post.likes}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary
+                    post.floor,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Text(
+                    post.author,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
             }
-        }
 
-        // 渲染正文内容节点
-        PostContent(post.contentNodes, onImageClick)
+            PostContent(post.contentNodes, onImageClick)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "${post.date}${if (post.views != "0") " · ${post.views} 浏览" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (post.likes != "0") {
+                    Text(
+                        "赞 ${post.likes}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        }
     }
 }
 

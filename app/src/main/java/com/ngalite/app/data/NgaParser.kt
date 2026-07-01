@@ -43,8 +43,21 @@ object NgaParser {
             val contentNodes = UbbParser.parse(rawText)
             val floor = row.selectFirst("a[name^=l]")?.text()?.trim() ?: "#$index"
             val likes = parseLikes(row)
-            Post(floor, author, date, likes, contentNodes)
+            val views = parseViews(row)
+            Post(floor, author, date, likes, views, contentNodes)
         }
+    }
+
+    /** 从楼层行解析浏览数 */
+    private fun parseViews(row: org.jsoup.nodes.Element): String {
+        row.select("[id^=postview]").firstOrNull()?.text()?.trim()?.let { num ->
+            val cleaned = num.replace(Regex("[^0-9-]"), "")
+            if (cleaned.isNotBlank()) return cleaned
+        }
+        val text = row.text()
+        val match = Regex("""浏览\s*[：:]?\s*([+\-]?\d+)""").find(text)
+        if (match != null) return match.groupValues[1]
+        return "0"
     }
 
     /** 从楼层行解析点赞数 */

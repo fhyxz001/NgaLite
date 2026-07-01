@@ -27,8 +27,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,20 +76,24 @@ sealed interface ListUiState {
     data class LoginRequired(val forumName: String) : ListUiState
 }
 
-data class Forum(val fid: String, val name: String)
+data class Forum(
+    val fid: String,
+    val name: String,
+    val description: String = ""
+)
 
-private val FORUMS = listOf(
-    Forum("-7955747", "晴风村"),
-    Forum("-7", "网事杂谈"),
-    Forum("706", "大时代"),
-    Forum("-447601", "二次元国家地理"),
-    Forum("-60252908", "旮旯game"),
-    Forum("498", "二手交易"),
-    Forum("428", "手综"),
-    Forum("-202020", "程序员职业交流"),
-    Forum("422", "炉石传说"),
-    Forum("840", "游戏王大师决斗"),
-    Forum("510558", "洛克王国世界"),
+internal val FORUMS = listOf(
+    Forum("-7955747", "晴风村", "情感生活"),
+    Forum("-7", "网事杂谈", "闲聊灌水"),
+    Forum("706", "大时代", "股票财经"),
+    Forum("-447601", "二次元国家地理", "动漫二次元"),
+    Forum("-60252908", "旮旯game", "Galgame"),
+    Forum("498", "二手交易", "二手闲置"),
+    Forum("428", "手综", "手游综合"),
+    Forum("-202020", "程序员职业交流", "IT 职场"),
+    Forum("422", "炉石传说", "Hearthstone"),
+    Forum("840", "游戏王大师决斗", "Master Duel"),
+    Forum("510558", "洛克王国世界", "洛克王国"),
 )
 
 private val LOGIN_REQUIRED_FIDS = setOf("-7", "-7955747")
@@ -194,11 +196,11 @@ class ListViewModel : ViewModel() {
 fun ListScreen(
     onTopicClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onForumSelectClick: () -> Unit,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
-    var showForumMenu by remember { mutableStateOf(false) }
     var showLoginDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -238,7 +240,7 @@ fun ListScreen(
             TopAppBar(
                 title = {
                     TextButton(
-                        onClick = { showForumMenu = true },
+                        onClick = onForumSelectClick,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Text(
@@ -248,33 +250,9 @@ fun ListScreen(
                         )
                         Icon(
                             Icons.Default.ArrowDropDown,
-                            contentDescription = "切换板块",
+                            contentDescription = "选择板块",
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
-                        DropdownMenu(
-                            expanded = showForumMenu,
-                            onDismissRequest = { showForumMenu = false }
-                        ) {
-                            FORUMS.forEach { forum ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            forum.name,
-                                            fontWeight = if (forum.fid == currentForum.fid) FontWeight.SemiBold else FontWeight.Normal
-                                        )
-                                    },
-                                    onClick = {
-                                        showForumMenu = false
-                                        vm.switchForum(forum)
-                                    },
-                                    leadingIcon = {
-                                        if (forum.fid == currentForum.fid) {
-                                            Text("✓", color = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                )
-                            }
-                        }
                     }
                 },
                 actions = {
