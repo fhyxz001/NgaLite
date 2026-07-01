@@ -11,8 +11,17 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "1.63"
+        versionCode = 25
+        versionName = "1.64"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("NGAliteKEY")
+            storePassword = "xiao123"
+            keyAlias = "key0"
+            keyPassword = "xiao123"
+        }
     }
 
     buildTypes {
@@ -22,6 +31,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

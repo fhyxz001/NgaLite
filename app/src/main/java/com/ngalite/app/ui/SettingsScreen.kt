@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,18 +16,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -140,14 +150,149 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(scrollState)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 检查更新
+            // ==========================================
+            // 账号管理
+            // ==========================================
+            SectionHeader(text = "账号管理")
+
+            if (logged) {
+                // ---- 已登录 ----
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
+                        Image(
+                            bitmap = cookieBitmap.asImageBitmap(),
+                            contentDescription = "登录状态",
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "NGA 账号",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            val name = loggedAccount
+                            Text(
+                                if (name.isNotBlank()) "已登录：$name" else "已登录",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { logout() },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Logout,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("退出登录")
+                        }
+                    }
+                }
+            } else {
+                // ---- 未登录 ----
+                Card(
+                    onClick = { showLogin = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Login,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "登录 NGA 账号",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "账号密码登录，自动处理验证码",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+
+                // 粘贴 Cookie 登录
+                Card(
+                    onClick = { showCookieDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "粘贴 Cookie 登录",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "从浏览器复制 Cookie 字符串粘贴",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // ==========================================
+            // 通用
+            // ==========================================
+            SectionHeader(text = "通用")
+
             Card(
                 onClick = { triggerCheckUpdate() },
                 modifier = Modifier.fillMaxWidth(),
@@ -161,11 +306,11 @@ fun SettingsScreen(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val updateBitmap = remember { BitmapFactory.decodeStream(context.assets.open("update.png")) }
-                    Image(
-                        bitmap = updateBitmap.asImageBitmap(),
-                        contentDescription = "检查更新",
-                        modifier = Modifier.size(28.dp)
+                    Icon(
+                        Icons.Default.Update,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
@@ -175,7 +320,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "当前版本：v${currentVersionName()}",
+                            "当前版本 v${currentVersionName()}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -185,73 +330,51 @@ fun SettingsScreen(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
-                    } else {
-                        Text(
-                            "v${currentVersionName()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
                     }
                 }
             }
 
-            // 登录 NGA 账号
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // ==========================================
+            // 关于
+            // ==========================================
+            SectionHeader(text = "关于")
+
             Card(
-                onClick = { showLogin = true },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
+                    val logoBitmap = remember { BitmapFactory.decodeStream(context.assets.open("logo.jpg")) }
                     Image(
-                        bitmap = cookieBitmap.asImageBitmap(),
-                        contentDescription = "登录 NGA 账号",
-                        modifier = Modifier.size(28.dp)
+                        bitmap = logoBitmap.asImageBitmap(),
+                        contentDescription = "NgaLite",
+                        modifier = Modifier.size(56.dp)
                     )
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "登录 NGA 账号",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            if (logged) {
-                                val name = loggedAccount
-                                if (name.isNotBlank()) "已登录：$name" else "已登录"
-                            } else {
-                                "账号密码登录，自动处理验证码"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (logged) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline
-                        )
-                    }
-                    if (logged) {
-                        TextButton(onClick = { logout() }) {
-                            Text("退出登录", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
-            }
-
-            // 粘贴 Cookie 兜底
-            if (!logged) {
-                TextButton(
-                    onClick = { showCookieDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                    Spacer(Modifier.height(8.dp))
                     Text(
-                        "已有 Cookie？粘贴登录",
-                        style = MaterialTheme.typography.labelMedium,
+                        "NgaLite",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "v${currentVersionName()}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "轻量级 NGA 论坛客户端",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
@@ -259,6 +382,7 @@ fun SettingsScreen(
         }
     }
 
+    // ---- 登录对话框 ----
     if (showLogin) {
         LoginDialog(onDismiss = {
             showLogin = false
@@ -266,6 +390,7 @@ fun SettingsScreen(
         })
     }
 
+    // ---- 粘贴 Cookie 对话框 ----
     if (showCookieDialog) {
         AlertDialog(
             onDismissRequest = { showCookieDialog = false },
@@ -385,6 +510,30 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = { downloadError = null }) { Text("知道了") }
             }
+        )
+    }
+}
+
+/**
+ * 设置页面专用的 section 标题组件。
+ * 使用 surfaceVariant 背景 + 加粗标签，与 ForumSelectScreen 风格一致。
+ */
+@Composable
+private fun SectionHeader(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
