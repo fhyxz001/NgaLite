@@ -24,7 +24,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import java.io.ByteArrayOutputStream
@@ -33,7 +32,6 @@ import java.text.SimpleDateFormat
 import java.util.Base64
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
@@ -53,10 +51,7 @@ object ExportManager {
     private const val EXPORT_DPI = 200f
 
     private val imageClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
+        NgaApi.sharedClientBuilder().build()
     }
 
     /** 导出内容快照 */
@@ -106,11 +101,15 @@ object ExportManager {
         val writer = MultiFormatWriter()
         val bitMatrix: BitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx)
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        for (x in 0 until sizePx) {
-            for (y in 0 until sizePx) {
-                bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
+        // 批量写入像素数组，比逐像素 setPixel 快数十倍
+        val pixels = IntArray(sizePx * sizePx)
+        for (y in 0 until sizePx) {
+            val rowOffset = y * sizePx
+            for (x in 0 until sizePx) {
+                pixels[rowOffset + x] = if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE
             }
         }
+        bitmap.setPixels(pixels, 0, sizePx, 0, 0, sizePx, sizePx)
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
         val bytes = stream.toByteArray()

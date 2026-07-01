@@ -2,8 +2,6 @@ package com.ngalite.app.ui
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,7 +48,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,12 +87,14 @@ fun SettingsScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    /** 获取当前应用版本名 */
-    fun currentVersionName(): String = try {
-        val pm = context.packageManager
-        pm.getPackageInfo(context.packageName, 0).versionName ?: ""
-    } catch (e: PackageManager.NameNotFoundException) {
-        ""
+    /** 获取当前应用版本名（缓存结果避免每次重组都查询 PackageManager） */
+    val currentVersionName = remember {
+        try {
+            val pm = context.packageManager
+            pm.getPackageInfo(context.packageName, 0).versionName ?: ""
+        } catch (e: PackageManager.NameNotFoundException) {
+            ""
+        }
     }
 
     /** 触发检查更新 */
@@ -103,7 +102,7 @@ fun SettingsScreen(
         if (isCheckingUpdate) return
         isCheckingUpdate = true
         scope.launch {
-            val result = UpdateManager.checkUpdate(currentVersionName())
+            val result = UpdateManager.checkUpdate(currentVersionName)
             updateResult = result
             isCheckingUpdate = false
         }
@@ -178,9 +177,8 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val cookieBitmap = remember { BitmapFactory.decodeStream(context.assets.open("cookie.png")) }
-                        Image(
-                            bitmap = cookieBitmap.asImageBitmap(),
+                        coil.compose.AsyncImage(
+                            model = "file:///android_asset/cookie.png",
                             contentDescription = "登录状态",
                             modifier = Modifier.size(28.dp)
                         )
@@ -320,7 +318,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "当前版本 v${currentVersionName()}",
+                            "当前版本 v${currentVersionName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -353,9 +351,8 @@ fun SettingsScreen(
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    val logoBitmap = remember { BitmapFactory.decodeStream(context.assets.open("logo.jpg")) }
-                    Image(
-                        bitmap = logoBitmap.asImageBitmap(),
+                    coil.compose.AsyncImage(
+                        model = "file:///android_asset/logo.jpg",
                         contentDescription = "NgaLite",
                         modifier = Modifier.size(56.dp)
                     )
@@ -367,7 +364,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        "v${currentVersionName()}",
+                        "v${currentVersionName}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -442,7 +439,7 @@ fun SettingsScreen(
                     if (result.hasUpdate) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "当前版本：v${currentVersionName()}",
+                            "当前版本：v${currentVersionName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )

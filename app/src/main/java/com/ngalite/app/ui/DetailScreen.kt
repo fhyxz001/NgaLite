@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,6 +72,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Dimension
 import coil.size.Size
+import com.ngalite.app.NgaApp
 import com.ngalite.app.data.ContentNode
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.ExportManager
@@ -95,6 +95,24 @@ sealed interface DetailUiState {
     ) : DetailUiState
 
     data class Error(val message: String) : DetailUiState
+}
+
+/**
+ * 全局缓存 emoji 资源存在性集合，避免每个 [InlineRichText] 实例各自扫描 assets。
+ * 在首次访问时通过 [Lazy] 初始化，后续所有 Composable 共享同一份。
+ */
+private val emojiExistsCache: Map<String, Boolean> by lazy {
+    val result = mutableMapOf<String, Boolean>()
+    val ctx = NgaApp.instance
+    for (folder in listOf("ac", "a2", "ng", "pst", "dt", "pg")) {
+        try {
+            val files = ctx.assets.list(folder) ?: continue
+            files.filter { it.endsWith(".png") }.forEach { file ->
+                result["$folder/${file.removeSuffix(".png")}"] = true
+            }
+        } catch (_: Exception) { }
+    }
+    result
 }
 
 class DetailViewModel : ViewModel() {
@@ -547,74 +565,102 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
     val screenWidthPx = remember(screenDensity, screenWidthDp) {
         (screenWidthDp * screenDensity).toInt()
     }
+
+    // 缓存节点分组结果，避免每次重组都重新遍历
+    val groupedNodes = remember(nodes) { groupContentNodes(nodes) }
+
+    groupedNodes.forEach { group ->
+        when (group) {
+            is NodeGroup.Inline -> {
+                InlineRichText(group.nodes)
+            }
+            is NodeGroup.Image -> {
+                val request = remember(group.url, screenWidthPx) {
+                    ImageRequest.Builder(context)
+                        .data(group.url)
+                        .size(Size(Dimension.Pixels(screenWidthPx), Dimension.Undefined))
+                        .build()
+                }
+                AsyncImage(
+                    model = request,
+                    contentDescription = "图片",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { onImageClick(group.url) },
+                    contentScale = ContentScale.FillWidth
+                )
+            }
+            is NodeGroup.Quote -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max)
+                        .padding(top = 12.dp, bottom = 4.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "引用",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            group.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 节点分组结果，用于缓存 PostContent 的遍历 */
+private sealed class NodeGroup {
+    class Inline(val nodes: List<ContentNode>) : NodeGroup()
+    data class Image(val url: String) : NodeGroup()
+    data class Quote(val content: String) : NodeGroup()
+}
+
+/** 将内容节点列表分组：连续的文本/表情合并为 Inline，图片和引用各自独立 */
+private fun groupContentNodes(nodes: List<ContentNode>): List<NodeGroup> {
+    if (nodes.isEmpty()) return emptyList()
+    val groups = mutableListOf<NodeGroup>()
     var i = 0
     while (i < nodes.size) {
         val node = nodes[i]
         if (node is ContentNode.Text || node is ContentNode.Emoji) {
-            // 收集连续的文本和表情节点，一起渲染为内联富文本
             val group = mutableListOf<ContentNode>()
             while (i < nodes.size && (nodes[i] is ContentNode.Text || nodes[i] is ContentNode.Emoji)) {
                 group.add(nodes[i])
                 i++
             }
-            InlineRichText(group)
+            groups.add(NodeGroup.Inline(group))
         } else if (node is ContentNode.Image) {
-            // 记忆 ImageRequest，避免每次重组都重新构建
-            val request = remember(node.url, screenWidthPx) {
-                ImageRequest.Builder(context)
-                    .data(node.url)
-                    .size(Size(Dimension.Pixels(screenWidthPx), Dimension.Undefined))
-                    .build()
-            }
-            AsyncImage(
-                model = request,
-                contentDescription = "图片",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onImageClick(node.url) },
-                contentScale = ContentScale.FillWidth
-            )
+            groups.add(NodeGroup.Image(node.url))
             i++
         } else if (node is ContentNode.Quote) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max)
-                    .padding(top = 12.dp, bottom = 4.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                // 左侧强调色竖条
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Column(Modifier.padding(12.dp)) {
-                    Text(
-                        "引用",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        node.content,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-                }
-            }
+            groups.add(NodeGroup.Quote(node.content))
             i++
         } else {
             i++
         }
     }
+    return groups
 }
 
 /**
@@ -624,20 +670,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InlineRichText(nodes: List<ContentNode>) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val emojiExists = remember {
-        // 一次性扫描所有表情目录，避免逐帧阻塞 UI
-        buildSet {
-            for (folder in listOf("ac", "a2", "ng", "pst", "dt", "pg")) {
-                try {
-                    val files = context.assets.list(folder) ?: continue
-                    files.filter { it.endsWith(".png") }.forEach { file ->
-                        add("$folder/${file.removeSuffix(".png")}")
-                    }
-                } catch (_: Exception) { }
-            }
-        }
-    }
+    val emojiExists = emojiExistsCache
 
     val hasContent = nodes.any { node ->
         when (node) {

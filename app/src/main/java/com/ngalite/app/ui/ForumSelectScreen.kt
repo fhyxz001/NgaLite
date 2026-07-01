@@ -1,7 +1,5 @@
 package com.ngalite.app.ui
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,17 +43,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ngalite.app.NgaApp
 import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
 
 private val StarColor = Color(0xFFFFC107)
+
+/**
+ * 全局缓存 assets/icons/ 目录下的文件名集合，避免每个 [ForumSelectItem] 都扫描目录。
+ * 首次访问时通过 [Lazy] 初始化。
+ */
+private val forumIconCache: Set<String> by lazy {
+    try {
+        NgaApp.instance.assets.list("icons")?.toSet() ?: emptySet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -243,18 +253,8 @@ private fun ForumSelectItem(
     onFavoriteClick: () -> Unit,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-
-    // 从 assets/icons/ 加载板块图标
-    val iconBitmap = remember(forum.fid) {
-        try {
-            context.assets.open("icons/f${forum.fid}.png").use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
+    // 全局缓存 assets/icons/ 下的文件列表，避免每项都扫描目录
+    val iconExists = remember(forum.fid) { forumIconCache.contains("f${forum.fid}.png") }
 
     Row(
         modifier = Modifier
@@ -271,9 +271,10 @@ private fun ForumSelectItem(
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            if (iconBitmap != null) {
-                Image(
-                    bitmap = iconBitmap.asImageBitmap(),
+            if (iconExists) {
+                // 使用 Coil 异步加载 assets 图片，避免主线程解码阻塞
+                coil.compose.AsyncImage(
+                    model = "file:///android_asset/icons/f${forum.fid}.png",
                     contentDescription = forum.name,
                     modifier = Modifier.size(28.dp),
                     contentScale = ContentScale.Fit

@@ -14,7 +14,8 @@ import okhttp3.HttpUrl
 class PersistentCookieJar(context: Context) : CookieJar {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val store = mutableMapOf<String, MutableList<Cookie>>()
+    private val store = java.util.concurrent.ConcurrentHashMap<String, MutableList<Cookie>>()
+    private val lock = Any()
 
     init {
         prefs.all.forEach { (key, value) ->
@@ -23,30 +24,34 @@ class PersistentCookieJar(context: Context) : CookieJar {
                 ?.split("; ")
                 ?.mapNotNull { parseCookie(it, host) }
                 ?: emptyList()
-            store[host] = cookies.toMutableList()
+            if (cookies.isNotEmpty()) store[host] = cookies.toMutableList()
         }
     }
 
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         if (cookies.isEmpty()) return
         val host = url.host
-        val list = store.getOrPut(host, ::mutableListOf)
-        cookies.forEach { new ->
-            list.removeAll { it.name == new.name && it.domain == new.domain }
-            list.add(new)
+        synchronized(lock) {
+            val list = store.getOrPut(host, ::mutableListOf)
+            cookies.forEach { new ->
+                list.removeAll { it.name == new.name && it.domain == new.domain }
+                list.add(new)
+            }
+            persist(host, list)
         }
-        persist(host, list)
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-        val list = store[url.host] ?: return emptyList()
         val now = System.currentTimeMillis()
-        val valid = list.filter { it.expiresAt > now }
-        if (valid.size != list.size) {
-            store[url.host] = valid.toMutableList()
-            persist(url.host, valid)
+        synchronized(lock) {
+            val list = store[url.host] ?: return emptyList()
+            val valid = list.filter { it.expiresAt > now }
+            if (valid.size != list.size) {
+                store[url.host] = valid.toMutableList()
+                persist(url.host, valid)
+            }
+            return valid
         }
-        return valid
     }
 
     /** 直接注入一串 Cookie（用于登录成功后把登录态写入 jar）。 */
@@ -58,8 +63,10 @@ class PersistentCookieJar(context: Context) : CookieJar {
     }
 
     fun clear() {
-        store.clear()
-        prefs.edit().clear().apply()
+        synchronized(lock) {
+            store.clear()
+            prefs.edit().clear().apply()
+        }
     }
 
     private fun persist(host: String, cookies: List<Cookie>) {

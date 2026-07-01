@@ -37,10 +37,8 @@ import com.ngalite.app.data.NgaApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.nio.charset.Charset
-import java.util.concurrent.TimeUnit
 
 private const val LOGIN_URL = "https://bbs.nga.cn/nuke.php?__lib=login&__act=account&login"
 private const val BASE_URL = "https://bbs.nga.cn/"
@@ -128,10 +126,7 @@ fun LoginWebScreen(onBack: () -> Unit) {
     }
 }
 
-private val pageClient = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .build()
+private val pageClient by lazy { NgaApi.sharedClientBuilder().build() }
 
 private fun fetchLoginPageHtml(): String {
     val req = Request.Builder()

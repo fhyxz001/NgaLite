@@ -1,5 +1,7 @@
 package com.ngalite.app.ui
 
+import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,7 +20,7 @@ object Routes {
     const val LOGIN_WEB = "login_web"
     const val FORUM_SELECT = "forum_select"
     const val DETAIL = "detail/{tid}/{forumName}"
-    fun detail(tid: String, forumName: String) = "detail/$tid/$forumName"
+    fun detail(tid: String, forumName: String) = "detail/$tid/${Uri.encode(forumName)}"
 }
 
 @Composable
@@ -36,6 +38,8 @@ fun NavGraph() {
                 launchSingleTop = true
                 restoreState = true
             }
+        }.onFailure { e ->
+            Log.e("NavGraph", "导航失败: $route", e)
         }
     }
 

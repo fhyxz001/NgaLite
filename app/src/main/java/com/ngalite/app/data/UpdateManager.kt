@@ -7,7 +7,6 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -29,15 +28,11 @@ object UpdateManager {
     )
 
     private val client by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
+        NgaApi.sharedClientBuilder().build()
     }
 
     private val downloadClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
+        NgaApi.sharedClientBuilder()
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
     }

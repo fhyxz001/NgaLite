@@ -23,22 +23,27 @@ object NgaApi {
     private val cookieJar by lazy { PersistentCookieJar(NgaApp.instance) }
 
     private val client by lazy {
-        OkHttpClient.Builder()
+        sharedClientBuilder()
             .cookieJar(cookieJar)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
             .build()
     }
 
-    /** 共享连接池，登录等临时请求复用，降低连接建立开销 */
-    private val sharedConnPool = ConnectionPool(4, 1, TimeUnit.MINUTES)
+    /** 共享连接池，所有 OkHttpClient 复用，降低连接建立开销 */
+    private val sharedConnPool = ConnectionPool(8, 3, TimeUnit.MINUTES)
+
+    /** 共享 Dispatcher，限制并发请求数 */
+    private val sharedDispatcher = okhttp3.Dispatcher().apply { maxRequestsPerHost = 8 }
+
+    /** 供其他模块复用的共享 OkHttpClient 配置构建器 */
+    fun sharedClientBuilder(): OkHttpClient.Builder = OkHttpClient.Builder()
+        .connectionPool(sharedConnPool)
+        .dispatcher(sharedDispatcher)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
 
     internal fun loginClient(cookieJar: CookieJar): OkHttpClient =
-        OkHttpClient.Builder()
+        sharedClientBuilder()
             .cookieJar(cookieJar)
-            .connectionPool(sharedConnPool)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
             .build()
 
     /** 把登录成功后得到的 Cookie 头字符串注入到持久化 jar，供后续请求携带。 */

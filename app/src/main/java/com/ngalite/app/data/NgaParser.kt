@@ -69,26 +69,26 @@ object NgaParser {
         }
     }
 
-    /** 从楼层行解析浏览数 */
+    /** 从楼层行解析浏览数：优先从特定元素提取，避免全文本扫描 */
     private fun parseViews(row: org.jsoup.nodes.Element): String {
         row.select("[id^=postview]").firstOrNull()?.text()?.trim()?.let { num ->
             val cleaned = num.replace(NUM_CLEAN, "")
             if (cleaned.isNotBlank()) return cleaned
         }
-        val text = row.text()
-        val match = VIEWS_REGEX.find(text)
+        // 回退：仅在特定元素未找到时才扫描全文
+        val match = VIEWS_REGEX.find(row.text())
         if (match != null) return match.groupValues[1]
         return "0"
     }
 
-    /** 从楼层行解析点赞数 */
+    /** 从楼层行解析点赞数：优先从特定元素提取，避免全文本扫描 */
     private fun parseLikes(row: org.jsoup.nodes.Element): String {
         row.select("[id^=likes_num]").firstOrNull()?.text()?.trim()?.let { num ->
             val cleaned = num.replace(NUM_CLEAN, "")
             if (cleaned.isNotBlank()) return cleaned
         }
-        val likeText = row.text()
-        val match = LIKES_REGEX.find(likeText)
+        // 回退：仅在特定元素未找到时才扫描全文
+        val match = LIKES_REGEX.find(row.text())
         if (match != null) return match.groupValues[1]
         return "0"
     }
