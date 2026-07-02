@@ -1,6 +1,14 @@
 package com.ngalite.app.ui
 
 import android.util.Log
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -67,6 +75,24 @@ fun NavGraph() {
     fun safeForumThreadsEntry(navController: NavController) = runCatching {
         navController.getBackStackEntry(Routes.FORUM_THREADS)
     }.getOrNull()
+
+    fun AnimatedContentTransitionScope<*>.tabEnter(): EnterTransition =
+        fadeIn(animationSpec = tween(200))
+
+    fun AnimatedContentTransitionScope<*>.tabExit(): ExitTransition =
+        fadeOut(animationSpec = tween(200))
+
+    fun AnimatedContentTransitionScope<*>.pageEnter(): EnterTransition =
+        slideInHorizontally(animationSpec = tween(300)) { it } + fadeIn(animationSpec = tween(250))
+
+    fun AnimatedContentTransitionScope<*>.pageExit(): ExitTransition =
+        slideOutHorizontally(animationSpec = tween(300)) { -it / 4 } + fadeOut(animationSpec = tween(200))
+
+    fun AnimatedContentTransitionScope<*>.pagePopEnter(): EnterTransition =
+        slideInHorizontally(animationSpec = tween(300)) { -it / 4 } + fadeIn(animationSpec = tween(200))
+
+    fun AnimatedContentTransitionScope<*>.pagePopExit(): ExitTransition =
+        slideOutHorizontally(animationSpec = tween(300)) { it } + fadeOut(animationSpec = tween(250))
 
     val currentBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -138,21 +164,37 @@ fun NavGraph() {
             startDestination = Routes.COMMUNITY,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Routes.COMMUNITY) {
+            composable(
+                Routes.COMMUNITY,
+                enterTransition = { tabEnter() },
+                exitTransition = { tabExit() },
+                popEnterTransition = { tabEnter() },
+                popExitTransition = { tabExit() }
+            ) {
                 CommunityScreen(
                     onForumClick = { fid ->
                         navSafe { nav.navigate(Routes.forumThreads(fid)) }
                     }
                 )
             }
-            composable(Routes.SETTINGS) {
+            composable(
+                Routes.SETTINGS,
+                enterTransition = { tabEnter() },
+                exitTransition = { tabExit() },
+                popEnterTransition = { tabEnter() },
+                popExitTransition = { tabExit() }
+            ) {
                 SettingsScreen(
                     onBack = null,
                     onLoginClick = { navSafe { nav.navigate(Routes.LOGIN_WEB) } }
                 )
             }
             composable(
-                route = Routes.LOGIN_WEB
+                route = Routes.LOGIN_WEB,
+                enterTransition = { pageEnter() },
+                exitTransition = { pageExit() },
+                popEnterTransition = { pagePopEnter() },
+                popExitTransition = { pagePopExit() }
             ) {
                 LoginWebScreen(onBack = { navSafe { nav.popBackStack() } })
             }
@@ -160,11 +202,16 @@ fun NavGraph() {
                 route = Routes.FORUM_THREADS,
                 arguments = listOf(
                     navArgument("fid") { type = NavType.StringType }
-                )
+                ),
+                enterTransition = { pageEnter() },
+                exitTransition = { pageExit() },
+                popEnterTransition = { pagePopEnter() },
+                popExitTransition = { pagePopExit() }
             ) { backStackEntry ->
                 val fid = backStackEntry.arguments?.getString("fid").orEmpty()
                 ForumThreadsScreen(
                     fid = fid,
+                    onBack = { navSafe { nav.popBackStack() } },
                     onTopicClick = { tid ->
                         navSafe { nav.navigate(Routes.detail(tid)) }
                     }
@@ -174,7 +221,11 @@ fun NavGraph() {
                 route = Routes.DETAIL,
                 arguments = listOf(
                     navArgument("tid") { type = NavType.StringType }
-                )
+                ),
+                enterTransition = { pageEnter() },
+                exitTransition = { pageExit() },
+                popEnterTransition = { pagePopEnter() },
+                popExitTransition = { pagePopExit() }
             ) { backStackEntry ->
                 val tid = backStackEntry.arguments?.getString("tid").orEmpty()
                 // 从 ForumThreads 的 ListViewModel 获取当前板块名称，避免通过路由传递

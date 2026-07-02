@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -234,6 +235,7 @@ class ListViewModel : ViewModel() {
 fun ForumThreadsScreen(
     fid: String,
     onTopicClick: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -338,6 +340,33 @@ fun ForumThreadsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item(key = "header") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回"
+                                )
+                            }
+                        }
+                        Text(
+                            currentForum.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
                 items(s.topics, key = { it.tid }) { topic ->
                     TopicItem(topic) { onTopicClick(topic.tid) }
                 }
