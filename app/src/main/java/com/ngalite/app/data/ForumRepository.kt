@@ -57,7 +57,12 @@ object ForumRepository {
                 forums.addAll(forumList)
             }
 
-            _categories = cats
+            // 按指定顺序排列分类：资讯与社区综合、硬件科技与消费、生活娱乐与休闲置顶
+            val priorityOrder = listOf("资讯与社区综合", "硬件科技与消费", "生活娱乐与休闲")
+            _categories = cats.sortedBy { cat ->
+                val idx = priorityOrder.indexOf(cat.name)
+                if (idx >= 0) idx else priorityOrder.size
+            }
             _allForums = forums
         }
     }

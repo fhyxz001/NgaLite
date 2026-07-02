@@ -53,6 +53,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
@@ -113,10 +114,12 @@ class ListViewModel : ViewModel() {
                 _state.value = ListUiState.Error("板块数据加载失败")
                 return@launch
             }
-            // 此处 all 必非空，firstOrNull 仅用于防御性编程
-            val first = all.firstOrNull() ?: run {
-                _state.value = ListUiState.Error("板块数据加载失败")
-                return@launch
+            // 优先使用收藏的第一个板块，无收藏时使用列表第一个
+            val favoriteFids = FavoriteStore.getFavorites()
+            val first = if (favoriteFids.isNotEmpty()) {
+                all.firstOrNull { it.fid in favoriteFids } ?: all.first()
+            } else {
+                all.first()
             }
             fid = first.fid
             _currentForum.value = first

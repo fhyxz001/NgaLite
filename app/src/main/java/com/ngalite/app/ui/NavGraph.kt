@@ -30,14 +30,16 @@ fun NavGraph() {
     var lastNavTime by remember { mutableStateOf(0L) }
     val minNavInterval = 500L
 
-    fun navigateOnce(route: String) {
+    /**
+     * 统一的导航防抖包装：对 navigate / popBackStack 等所有导航操作统一约束，
+     * 避免快速连续点击导致导航转场动画未完成就发起下一次导航，造成白屏卡死。
+     */
+    fun navSafe(block: () -> Unit) {
         val now = System.currentTimeMillis()
         if (now - lastNavTime < minNavInterval) return
         lastNavTime = now
-        runCatching {
-            nav.navigate(route)
-        }.onFailure { e ->
-            Log.e("NavGraph", "导航失败: $route", e)
+        runCatching { block() }.onFailure { e ->
+            Log.e("NavGraph", "导航操作失败", e)
         }
     }
 
@@ -54,10 +56,10 @@ fun NavGraph() {
             ListScreen(
                 vm = vm,
                 onTopicClick = { tid ->
-                    navigateOnce(Routes.detail(tid))
+                    navSafe { nav.navigate(Routes.detail(tid)) }
                 },
-                onSettingsClick = { navigateOnce(Routes.SETTINGS) },
-                onForumSelectClick = { navigateOnce(Routes.FORUM_SELECT) }
+                onSettingsClick = { navSafe { nav.navigate(Routes.SETTINGS) } },
+                onForumSelectClick = { navSafe { nav.navigate(Routes.FORUM_SELECT) } }
             )
         }
         composable(Routes.FORUM_SELECT) {
@@ -71,22 +73,22 @@ fun NavGraph() {
                 val currentForum by vm.currentForum.collectAsState()
                 ForumSelectScreen(
                     currentForum = currentForum,
-                    onBack = { nav.popBackStack() },
+                    onBack = { navSafe { nav.popBackStack() } },
                     onForumSelected = { forum ->
                         vm.switchForum(forum)
-                        nav.popBackStack()
+                        navSafe { nav.popBackStack() }
                     }
                 )
             }
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                onBack = { nav.popBackStack() },
-                onLoginClick = { nav.navigate(Routes.LOGIN_WEB) }
+                onBack = { navSafe { nav.popBackStack() } },
+                onLoginClick = { navSafe { nav.navigate(Routes.LOGIN_WEB) } }
             )
         }
         composable(Routes.LOGIN_WEB) {
-            LoginWebScreen(onBack = { nav.popBackStack() })
+            LoginWebScreen(onBack = { navSafe { nav.popBackStack() } })
         }
         composable(
             route = Routes.DETAIL,
@@ -100,7 +102,7 @@ fun NavGraph() {
             val forumName = if (listEntry != null) {
                 viewModel<ListViewModel>(listEntry).currentForum.value.name
             } else ""
-            DetailScreen(tid = tid, forumName = forumName, onBack = { nav.popBackStack() })
+            DetailScreen(tid = tid, forumName = forumName, onBack = { navSafe { nav.popBackStack() } })
         }
     }
 }
