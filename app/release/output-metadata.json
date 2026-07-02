@@ -11,9 +11,9 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 31,
-      "versionName": "1.70",
-      "outputFile": "NgaLite-v1.70-release.apk"
+      "versionCode": 34,
+      "versionName": "1.73",
+      "outputFile": "NgaLite-v1.73-release.apk"
     }
   ],
   "elementType": "File",
@@ -22,14 +22,14 @@
       "minApi": 28,
       "maxApi": 30,
       "baselineProfiles": [
-        "baselineProfiles/1/NgaLite-v1.70-release.dm"
+        "baselineProfiles/1/NgaLite-v1.73-release.dm"
       ]
     },
     {
       "minApi": 31,
       "maxApi": 2147483647,
       "baselineProfiles": [
-        "baselineProfiles/0/NgaLite-v1.70-release.dm"
+        "baselineProfiles/0/NgaLite-v1.73-release.dm"
       ]
     }
   ],
