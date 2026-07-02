@@ -6,7 +6,8 @@ data class Topic(
     val title: String,
     val replies: String,
     val author: String,
-    val replyTime: String
+    val replyTime: String,
+    val previewImages: List<String> = emptyList()
 )
 
 /** 帖子详情中的单条回复（楼层） */

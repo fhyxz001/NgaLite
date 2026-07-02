@@ -2,6 +2,7 @@
 
 # 保留 Jsoup 解析能力
 -keep class org.jsoup.** { *; }
+-dontwarn org.jspecify.annotations.NullMarked
 
 # 保留 OkHttp 网络层
 -dontwarn okhttp3.**

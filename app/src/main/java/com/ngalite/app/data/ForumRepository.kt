@@ -53,12 +53,12 @@ object ForumRepository {
                         description = o.optString("description", "")
                     )
                 }
-                cats.add(ForumCategory(key, forumList))
+                cats.add(ForumCategory(categoryDisplayNames[key] ?: key, forumList))
                 forums.addAll(forumList)
             }
 
-            // 按指定顺序排列分类：资讯与社区综合、硬件科技与消费、生活娱乐与休闲置顶
-            val priorityOrder = listOf("资讯与社区综合", "硬件科技与消费", "生活娱乐与休闲")
+            // 按指定顺序排列分类：资讯综合、硬件科技、生活娱乐置顶
+            val priorityOrder = listOf("资讯综合", "硬件科技", "生活娱乐")
             _categories = cats.sortedBy { cat ->
                 val idx = priorityOrder.indexOf(cat.name)
                 if (idx >= 0) idx else priorityOrder.size
@@ -66,6 +66,24 @@ object ForumRepository {
             _allForums = forums
         }
     }
+
+    /** 板块分组显示名称映射（精简到 4 字以内） */
+    private val categoryDisplayNames = mapOf(
+        "魔兽世界专区" to "魔兽世界",
+        "暴雪游戏专区" to "暴雪游戏",
+        "二次元手游" to "二次元",
+        "PC与主机单机" to "PC单机",
+        "网络游戏与电竞" to "网游电竞",
+        "射击与竞技游戏" to "射击竞技",
+        "策略与战棋类" to "策略战棋",
+        "卡牌与桌游跑团" to "卡牌桌游",
+        "MMO与端游专区" to "MMO端游",
+        "Galgame与虚拟偶像" to "Gal虚拟",
+        "生活娱乐与休闲" to "生活娱乐",
+        "硬件科技与消费" to "硬件科技",
+        "资讯与社区综合" to "资讯综合",
+        "文学与二次元创作" to "文学创作"
+    )
 
     /**
      * 确保已加载，未加载则在 IO 线程同步阻塞加载。

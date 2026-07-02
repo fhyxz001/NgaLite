@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -25,27 +29,22 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Html
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -261,7 +260,6 @@ fun DetailScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
-    var showTopMenu by remember { mutableStateOf(false) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -286,58 +284,25 @@ fun DetailScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("帖子详情") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showTopMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
-                        }
-                        DropdownMenu(
-                            expanded = showTopMenu,
-                            onDismissRequest = { showTopMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("刷新") },
-                                onClick = {
-                                    showTopMenu = false
-                                    vm.load(tid, forumName)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("导出 / 分享") },
-                                enabled = state is DetailUiState.Success && !isExporting,
-                                onClick = {
-                                    showTopMenu = false
-                                    showExportDialog = true
-                                }
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
+        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp
         when (val s = state) {
             is DetailUiState.Loading -> Box(
-                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(top = topSpacing)
+                    .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
 
             is DetailUiState.Error -> Column(
-                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(top = topSpacing)
+                    .background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -358,33 +323,37 @@ fun DetailScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topSpacing + 12.dp, bottom = 12.dp)
             ) {
-                if (s.forumName.isNotBlank()) {
-                    item {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        ) {
-                            Text(
-                                s.forumName,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回"
                             )
                         }
+                        Text(
+                            s.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        IconButton(
+                            onClick = { showExportDialog = true },
+                            enabled = state is DetailUiState.Success && !isExporting
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "分享")
+                        }
                     }
-                }
-
-                item {
-                    Text(
-                        s.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
                 }
 
                 s.originalPost?.let { post ->

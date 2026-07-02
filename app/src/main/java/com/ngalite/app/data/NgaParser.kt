@@ -47,7 +47,39 @@ object NgaParser {
             val replies = row.selectFirst("a.replies")?.text()?.trim() ?: ""
             val replyTime = row.selectFirst(".replydate")?.text()?.trim() ?: ""
             val author = row.selectFirst(".replyer")?.text()?.trim() ?: ""
-            if (title.isEmpty()) null else Topic(tid, title, replies, author, replyTime)
+            val previewImages = extractPreviewImages(row, title)
+            if (title.isEmpty()) null else Topic(tid, title, replies, author, replyTime, previewImages)
+        }
+    }
+
+    /** 从帖子行中提取主楼预览图片地址 */
+    private fun extractPreviewImages(row: org.jsoup.nodes.Element, title: String): List<String> {
+        val images = mutableListOf<String>()
+        // 1. 提取行内 <img> 标签（排除版块图标）
+        row.select("img").forEach { img ->
+            val src = img.attr("src").trim()
+            if (src.isNotEmpty() && !src.contains("/ficon/", ignoreCase = true)) {
+                images.add(toAbsoluteUrl(src))
+            }
+        }
+        // 2. 标题中可能包含 [img]...[/img] UBB 图片
+        val ubbPattern = Regex("""(?i)\[img\](.*?)\[/img\]""")
+        ubbPattern.findAll(title).forEach { match ->
+            val path = match.groupValues[1].trim().removePrefix("./").removePrefix("/")
+            if (path.isNotEmpty()) {
+                images.add(UbbParser.IMG_BASE + path)
+            }
+        }
+        return images.distinct().take(5)
+    }
+
+    /** 将相对地址补全为绝对地址 */
+    private fun toAbsoluteUrl(src: String): String {
+        return when {
+            src.startsWith("http://", ignoreCase = true) ||
+                src.startsWith("https://", ignoreCase = true) -> src
+            src.startsWith("/") -> "https://bbs.nga.cn$src"
+            else -> "https://bbs.nga.cn/$src"
         }
     }
 

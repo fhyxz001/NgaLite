@@ -3,7 +3,7 @@ package com.ngalite.app.data
 /** 解析 UBB 标签，将原始正文拆分为 ContentNode 列表 */
 object UbbParser {
 
-    private const val IMG_BASE = "https://img.nga.178.com/attachments/"
+    internal const val IMG_BASE = "https://img.nga.178.com/attachments/"
     private const val T_IMG = 0
     private const val T_QUOTE = 1
     private const val T_EMOJI = 2

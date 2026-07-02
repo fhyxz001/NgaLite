@@ -1,8 +1,5 @@
 package com.ngalite.app.ui
 
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,39 +7,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,17 +44,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
-import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
-import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
@@ -115,41 +106,42 @@ class ListViewModel : ViewModel() {
     private var lastSwitchTime = 0L
     private val switchDebounceMs = 200L
 
-    init {
+    /**
+     * 根据 fid 加载对应板块。用于从社区页进入帖子列表时被动初始化，
+     * 避免旧版在 init 中自动加载导致的启动逻辑耦合。
+     */
+    fun loadForum(targetFid: String) {
+        if (targetFid == fid && _state.value !is ListUiState.Loading) return
+        val now = System.currentTimeMillis()
+        if (now - lastSwitchTime < switchDebounceMs) return
+        lastSwitchTime = now
+
         viewModelScope.launch {
-            // 在 IO 线程加载板块数据，避免阻塞主线程
-            ForumRepository.ensureLoadedAsync(NgaApp.instance)
-            val all = ForumRepository.allForums
-            if (all.isEmpty()) {
-                _state.value = ListUiState.Error("板块数据加载失败")
-                return@launch
+            try {
+                withContext(Dispatchers.IO) {
+                    ForumRepository.ensureLoadedAsync(NgaApp.instance)
+                }
+                val forum = ForumRepository.allForums.firstOrNull { it.fid == targetFid }
+                if (forum == null) {
+                    _state.value = ListUiState.Error("板块不存在")
+                    return@launch
+                }
+                if (!forum.requiresLogin()) {
+                    lastAccessibleForum = forum
+                }
+                fid = forum.fid
+                _currentForum.value = forum
+                load()
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                _state.value = ListUiState.Error(t.message ?: "加载失败")
             }
-            // 优先使用收藏的第一个板块，无收藏时使用列表第一个
-            val favoriteFids = FavoriteStore.getFavorites()
-            val first = if (favoriteFids.isNotEmpty()) {
-                all.firstOrNull { it.fid in favoriteFids } ?: all.first()
-            } else {
-                all.first()
-            }
-            fid = first.fid
-            _currentForum.value = first
-            lastAccessibleForum = all.firstOrNull { !it.requiresLogin() }
-            load()
         }
     }
 
     fun switchForum(forum: Forum) {
         if (forum.fid == fid) return
-        // 防抖：快速连续切换时只执行最后一次，避免叠加触发 load 与导航竞态
-        val now = System.currentTimeMillis()
-        if (now - lastSwitchTime < switchDebounceMs) return
-        lastSwitchTime = now
-        if (!forum.requiresLogin()) {
-            lastAccessibleForum = forum
-        }
-        fid = forum.fid
-        _currentForum.value = forum
-        load()
+        loadForum(forum.fid)
     }
 
     /** 取消登录后回到上次无需登录的板块 */
@@ -186,10 +178,10 @@ class ListViewModel : ViewModel() {
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
                 _state.value = ListUiState.Success(topics = topics)
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 if (myGen != generation) return@launch
-                _state.value = ListUiState.Error(e.message ?: "未知错误")
+                _state.value = ListUiState.Error(t.message ?: "未知错误")
             }
         }
     }
@@ -223,8 +215,8 @@ class ListViewModel : ViewModel() {
                     isLoadingMore = false,
                     hasMore = hasMore
                 )
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 if (myGen != generation) return@launch
                 isLoadingMore = false
                 _state.value = ListUiState.Success(
@@ -239,58 +231,19 @@ class ListViewModel : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ListScreen(
+fun ForumThreadsScreen(
+    fid: String,
     onTopicClick: (String) -> Unit,
-    onSettingsClick: () -> Unit,
-    onForumSelectClick: () -> Unit,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
     var showLoginDialog by remember { mutableStateOf(false) }
-    var showForumDropdown by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val context = LocalContext.current
 
-    // 板块分类列表（用于触发 ForumRepository 加载完成后的重组）
-    var categories by remember { mutableStateOf<List<ForumCategory>>(emptyList()) }
-    // 收藏的板块 FID 集合：每次打开下拉菜单时刷新，保证用户在「板块管理」中的改动即时生效
-    var favoriteFids by remember { mutableStateOf(FavoriteStore.getFavorites()) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            ForumRepository.load(context)
-        }
-        categories = ForumRepository.categories
-    }
-
-    // 打开下拉菜单时重新读取收藏，确保从「板块管理」返回后列表是最新的
-    LaunchedEffect(showForumDropdown) {
-        if (showForumDropdown) {
-            favoriteFids = FavoriteStore.getFavorites()
-        }
-    }
-
-    val favoriteForums = remember(favoriteFids, categories) {
-        if (favoriteFids.isEmpty()) emptyList()
-        else ForumRepository.allForums.filter { it.fid in favoriteFids }
-    }
-
-    /** 读取剪贴板中的 NGA 帖子链接并跳转 */
-    fun readClipboardAndOpen() {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        // primaryClip 可能为 null 或 itemCount 为 0，直接 getItemAt(0) 会越界崩溃
-        val clip = clipboard.primaryClip
-        val text = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
-        } else ""
-        val regex = Regex("""https?://bbs\.nga\.cn/read\.php\?\S*?tid=(\d+)""")
-        val match = regex.find(text)
-        if (match != null) {
-            onTopicClick(match.groupValues[1])
-        } else {
-            Toast.makeText(context, "剪贴板中没有 NGA 帖子链接", Toast.LENGTH_SHORT).show()
-        }
+    /** 进入页面时根据 fid 加载板块 */
+    LaunchedEffect(fid) {
+        vm.loadForum(fid)
     }
 
     // 切换板块后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 或显示异常
@@ -319,158 +272,27 @@ fun ListScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Box {
-                        TextButton(
-                            onClick = { showForumDropdown = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                currentForum.name,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = "选择板块",
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showForumDropdown,
-                            onDismissRequest = { showForumDropdown = false },
-                            modifier = Modifier.heightIn(max = 420.dp)
-                        ) {
-                            val scrollState = rememberScrollState()
-                            Column(modifier = Modifier.verticalScroll(scrollState)) {
-                                if (favoriteForums.isEmpty()) {
-                                    // 空状态：用户尚未收藏任何板块
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 20.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                "暂无收藏板块",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                "请在「管理板块」中添加收藏",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    // 收藏板块标题
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            "收藏板块",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    // 收藏板块列表（用于快速切换）
-                                    favoriteForums.forEach { forum ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    forum.name,
-                                                    color = if (forum.fid == currentForum.fid)
-                                                        MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.onSurface
-                                                )
-                                            },
-                                            onClick = {
-                                                showForumDropdown = false
-                                                vm.switchForum(forum)
-                                            },
-                                            trailingIcon = if (forum.fid == currentForum.fid) {
-                                                {
-                                                    Icon(
-                                                        Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
-                                            } else null
-                                        )
-                                    }
-                                }
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                // 管理板块入口：跳转到完整的板块选择页，添加/取消收藏
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.Tune,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(
-                                                "管理板块",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        showForumDropdown = false
-                                        onForumSelectClick()
-                                    }
-                                )
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { readClipboardAndOpen() }) {
-                        coil.compose.AsyncImage(
-                            model = "file:///android_asset/in.png",
-                            contentDescription = "读取剪贴板链接",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        coil.compose.AsyncImage(
-                            model = "file:///android_asset/set.png",
-                            contentDescription = "设置",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
+        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
         when (val s = state) {
             is ListUiState.Loading -> Box(
-                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(top = topSpacing)
+                    .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
             is ListUiState.Error -> Column(
-                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(top = topSpacing)
+                    .background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -486,7 +308,11 @@ fun ListScreen(
             }
 
             is ListUiState.LoginRequired -> Column(
-                Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.surface),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(top = topSpacing)
+                    .background(MaterialTheme.colorScheme.surface),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -504,7 +330,12 @@ fun ListScreen(
             is ListUiState.Success -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = topSpacing + 12.dp,
+                    bottom = 12.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(s.topics, key = { it.tid }) { topic ->
@@ -536,7 +367,7 @@ fun ListScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 16.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -587,8 +418,31 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis
             )
+            if (topic.previewImages.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        topic.previewImages,
+                        key = { url -> "${topic.tid}_preview_$url" }
+                    ) { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = "帖子图片",
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -614,7 +468,7 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
