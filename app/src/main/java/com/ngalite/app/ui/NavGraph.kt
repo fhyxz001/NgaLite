@@ -99,7 +99,8 @@ fun NavGraph() {
                         },
                         icon = {
                             Icon(
-                                Icons.Default.Forum,
+                                modifier = Modifier.padding(top = 4.dp),
+                                imageVector = Icons.Default.Forum,
                                 contentDescription = "社区"
                             )
                         }
@@ -122,7 +123,8 @@ fun NavGraph() {
                         },
                         icon = {
                             Icon(
-                                Icons.Default.Settings,
+                                modifier = Modifier.padding(top = 4.dp),
+                                imageVector = Icons.Default.Settings,
                                 contentDescription = "设置"
                             )
                         }
