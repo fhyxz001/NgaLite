@@ -60,7 +60,6 @@ fun NavGraph() {
                 },
                 onSettingsClick = { navSafe { nav.navigate(Routes.SETTINGS) } },
                 onForumSelectClick = { navSafe { nav.navigate(Routes.FORUM_SELECT) } }
-                onSettingsClick = { navigateOnce(Routes.SETTINGS) }
             )
         }
         composable(Routes.FORUM_SELECT) {
@@ -84,11 +83,9 @@ fun NavGraph() {
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                onBack = { nav.popBackStack() },
-                onLoginClick = { nav.navigate(Routes.LOGIN_WEB) },
-                onForumManageClick = { navigateOnce(Routes.FORUM_SELECT) }
                 onBack = { navSafe { nav.popBackStack() } },
-                onLoginClick = { navSafe { nav.navigate(Routes.LOGIN_WEB) } }
+                onLoginClick = { navSafe { nav.navigate(Routes.LOGIN_WEB) } },
+                onForumManageClick = { navSafe { nav.navigate(Routes.FORUM_SELECT) } }
             )
         }
         composable(Routes.LOGIN_WEB) {

@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -241,6 +242,7 @@ class ListViewModel : ViewModel() {
 fun ListScreen(
     onTopicClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onForumSelectClick: () -> Unit,
     vm: ListViewModel = viewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -250,14 +252,28 @@ fun ListScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
-    // 板块分类列表（用于下拉菜单）
+    // 板块分类列表（用于触发 ForumRepository 加载完成后的重组）
     var categories by remember { mutableStateOf<List<ForumCategory>>(emptyList()) }
+    // 收藏的板块 FID 集合：每次打开下拉菜单时刷新，保证用户在「板块管理」中的改动即时生效
+    var favoriteFids by remember { mutableStateOf(FavoriteStore.getFavorites()) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             ForumRepository.load(context)
         }
         categories = ForumRepository.categories
+    }
+
+    // 打开下拉菜单时重新读取收藏，确保从「板块管理」返回后列表是最新的
+    LaunchedEffect(showForumDropdown) {
+        if (showForumDropdown) {
+            favoriteFids = FavoriteStore.getFavorites()
+        }
+    }
+
+    val favoriteForums = remember(favoriteFids, categories) {
+        if (favoriteFids.isEmpty()) emptyList()
+        else ForumRepository.allForums.filter { it.fid in favoriteFids }
     }
 
     /** 读取剪贴板中的 NGA 帖子链接并跳转 */
@@ -329,8 +345,30 @@ fun ListScreen(
                         ) {
                             val scrollState = rememberScrollState()
                             Column(modifier = Modifier.verticalScroll(scrollState)) {
-                                categories.forEach { category ->
-                                    // 分类标题
+                                if (favoriteForums.isEmpty()) {
+                                    // 空状态：用户尚未收藏任何板块
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                "暂无收藏板块",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "请在「管理板块」中添加收藏",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // 收藏板块标题
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -338,25 +376,22 @@ fun ListScreen(
                                             .padding(horizontal = 16.dp, vertical = 8.dp)
                                     ) {
                                         Text(
-                                            category.name,
+                                            "收藏板块",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    // 该分类下的板块
-                                    category.forums.forEach { forum ->
+                                    // 收藏板块列表（用于快速切换）
+                                    favoriteForums.forEach { forum ->
                                         DropdownMenuItem(
                                             text = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Spacer(Modifier.width(4.dp))
-                                                    Text(
-                                                        forum.name,
-                                                        color = if (forum.fid == currentForum.fid)
-                                                            MaterialTheme.colorScheme.primary
-                                                        else MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                }
+                                                Text(
+                                                    forum.name,
+                                                    color = if (forum.fid == currentForum.fid)
+                                                        MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurface
+                                                )
                                             },
                                             onClick = {
                                                 showForumDropdown = false
@@ -373,10 +408,30 @@ fun ListScreen(
                                             } else null
                                         )
                                     }
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.outlineVariant
-                                    )
                                 }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                // 管理板块入口：跳转到完整的板块选择页，添加/取消收藏
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Tune,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                "管理板块",
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        showForumDropdown = false
+                                        onForumSelectClick()
+                                    }
+                                )
                             }
                         }
                     }
