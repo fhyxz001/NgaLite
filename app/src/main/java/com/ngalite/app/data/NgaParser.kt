@@ -47,4 +47,98 @@ object NgaParser {
             val replies = row.selectFirst("a.replies")?.text()?.trim() ?: ""
             val replyTime = row.selectFirst(".replydate")?.text()?.trim() ?: ""
             val author = row.selectFirst(".replyer")?.text()?.trim() ?: ""
-            val previewImages = extractPreviewImages(r
+            val previewImages = extractPreviewImages(row, title)
+            if (title.isEmpty()) null else Topic(tid, title, replies, author, replyTime, previewImages)
+        }
+    }
+
+    /** 从帖子行中提取主楼预览图片地址 */
+    private fun extractPreviewImages(row: org.jsoup.nodes.Element, title: String): List<String> {
+        val images = mutableListOf<String>()
+        // 1. 提取行内 <img> 标签（排除版块图标）
+        row.select("img").forEach { img ->
+            val src = img.attr("src").trim()
+            if (src.isNotEmpty() && !src.contains("/ficon/", ignoreCase = true)) {
+                images.add(toAbsoluteUrl(src))
+            }
+        }
+        // 2. 标题中可能包含 [img]...[/img] UBB 图片
+        val ubbPattern = Regex("""(?i)\[img\](.*?)\[/img\]""")
+        ubbPattern.findAll(title).forEach { match ->
+            val path = match.groupValues[1].trim().removePrefix("./").removePrefix("/")
+            if (path.isNotEmpty()) {
+                images.add(UbbParser.IMG_BASE + path)
+            }
+        }
+        return images.distinct().take(5)
+    }
+
+    /** 将相对地址补全为绝对地址 */
+    private fun toAbsoluteUrl(src: String): String {
+        return when {
+            src.startsWith("http://", ignoreCase = true) ||
+                src.startsWith("https://", ignoreCase = true) -> src
+            src.startsWith("/") -> "https://bbs.nga.cn$src"
+            else -> "https://bbs.nga.cn/$src"
+        }
+    }
+
+    /** 解析帖子详情（楼层列表） */
+    fun parsePosts(html: String): List<Post> = parsePostsFromDoc(Jsoup.parse(html))
+
+    private fun parsePostsFromDoc(doc: org.jsoup.nodes.Document): List<Post> {
+        val rows = doc.select("tr.postrow")
+        return rows.mapIndexedNotNull { index, row ->
+            val author = row.selectFirst("[id^=postauthor]")?.text()?.trim() ?: ""
+            val date = row.selectFirst("[id^=postdate]")?.text()?.trim() ?: ""
+            val contentEl = row.selectFirst("[id^=postcontent]") ?: return@mapIndexedNotNull null
+            val rawText = htmlToText(contentEl.html())
+            val contentNodes = UbbParser.parse(rawText)
+            val floor = row.selectFirst("a[name^=l]")?.text()?.trim() ?: "#$index"
+            val likes = parseLikes(row)
+            val views = parseViews(row)
+            Post(floor, author, date, likes, views, contentNodes)
+        }
+    }
+
+    /** 从楼层行解析浏览数：优先从特定元素提取，避免全文本扫描 */
+    private fun parseViews(row: org.jsoup.nodes.Element): String {
+        row.select("[id^=postview]").firstOrNull()?.text()?.trim()?.let { num ->
+            val cleaned = num.replace(NUM_CLEAN, "")
+            if (cleaned.isNotBlank()) return cleaned
+        }
+        // 回退：仅在特定元素未找到时才扫描全文
+        val match = VIEWS_REGEX.find(row.text())
+        if (match != null) return match.groupValues[1]
+        return "0"
+    }
+
+    /** 从楼层行解析点赞数：优先从特定元素提取，避免全文本扫描 */
+    private fun parseLikes(row: org.jsoup.nodes.Element): String {
+        row.select("[id^=likes_num]").firstOrNull()?.text()?.trim()?.let { num ->
+            val cleaned = num.replace(NUM_CLEAN, "")
+            if (cleaned.isNotBlank()) return cleaned
+        }
+        // 回退：仅在特定元素未找到时才扫描全文
+        val match = LIKES_REGEX.find(row.text())
+        if (match != null) return match.groupValues[1]
+        return "0"
+    }
+
+    /** HTML 转纯文本：保留换行，剥离标签与实体（保留 UBB 标签） */
+    private fun htmlToText(html: String): String {
+        return html
+            .replace(BR_REGEX, "\n")
+            .replace(P_REGEX, "\n\n")
+            .replace(DIV_REGEX, "\n")
+            .replace(TAG_REGEX, "")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace(MULTI_NEWLINE, "\n\n")
+            .trim()
+    }
+}
