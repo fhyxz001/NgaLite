@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
@@ -23,9 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -53,17 +50,9 @@ object Routes {
 @Composable
 fun NavGraph() {
     val nav = rememberNavController()
-    var lastNavTime by remember { mutableStateOf(0L) }
-    val minNavInterval = 500L
 
-    /**
-     * 统一的导航防抖包装：对 navigate / popBackStack 等所有导航操作统一约束，
-     * 避免快速连续点击导致导航转场动画未完成就发起下一次导航，造成白屏卡死。
-     */
+    /** 避免单次导航异常导致界面崩溃，不跨操作吞掉正常导航。 */
     fun navSafe(block: () -> Unit) {
-        val now = System.currentTimeMillis()
-        if (now - lastNavTime < minNavInterval) return
-        lastNavTime = now
         runCatching { block() }.onFailure { e ->
             Log.e("NavGraph", "导航操作失败", e)
         }
@@ -103,7 +92,6 @@ fun NavGraph() {
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(
-                    modifier = Modifier.height(56.dp),
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
@@ -125,11 +113,11 @@ fun NavGraph() {
                         },
                         icon = {
                             Icon(
-                                modifier = Modifier.padding(top = 4.dp),
                                 imageVector = Icons.Default.Forum,
                                 contentDescription = "社区"
                             )
-                        }
+                        },
+                        label = { Text("社区") }
                     )
                     NavigationBarItem(
                         selected = currentRoute == Routes.SETTINGS,
@@ -149,11 +137,11 @@ fun NavGraph() {
                         },
                         icon = {
                             Icon(
-                                modifier = Modifier.padding(top = 4.dp),
                                 imageVector = Icons.Default.Settings,
                                 contentDescription = "设置"
                             )
-                        }
+                        },
+                        label = { Text("设置") }
                     )
                 }
             }

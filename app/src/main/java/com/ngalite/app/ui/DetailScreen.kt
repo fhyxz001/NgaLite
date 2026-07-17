@@ -136,6 +136,10 @@ class DetailViewModel : ViewModel() {
                 if (myGen != loadGeneration) return@launch
                 val result = withContext(Dispatchers.Default) { NgaParser.parseDetail(html) }
                 if (myGen != loadGeneration) return@launch
+                if (result.posts.isEmpty()) {
+                    _state.value = DetailUiState.Error("未能解析帖子内容，请稍后重试")
+                    return@launch
+                }
                 val originalPost = result.posts.firstOrNull()
                 val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
                 _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
@@ -377,6 +381,17 @@ fun DetailScreen(
                 itemsIndexed(s.comments, key = { index, post -> "$index-${post.floor}-${post.author}" }) { _, post ->
                     CommentCard(post) { fullScreenImageUrl = it }
                 }
+            }
+        }
+
+        if (state !is DetailUiState.Success) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(top = topSpacing, start = 8.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         }
     }
@@ -689,109 +704,4 @@ private fun InlineRichText(nodes: List<ContentNode>) {
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.outline
                             )
-                        }
-                    }
-                    else -> {}
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExportDialog(
-    onDismiss: () -> Unit,
-    isExporting: Boolean,
-    onExportMarkdown: (includeAttribution: Boolean) -> Unit,
-    onExportHtml: (includeAttribution: Boolean) -> Unit,
-    onExportImage: (includeAttribution: Boolean) -> Unit,
-    onExportPdf: (includeAttribution: Boolean) -> Unit,
-) {
-    var includeAttribution by remember { mutableStateOf(true) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("导出 / 分享") },
-        text = {
-            androidx.compose.foundation.layout.Column {
-                Text(
-                    "选择导出格式，导出内容已适配手机屏幕展示",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-
-                ExportOption(Icons.Default.Code, "Markdown", "复制为 Markdown 文本") {
-                    onExportMarkdown(includeAttribution)
-                }
-                ExportOption(Icons.Default.Html, "HTML", "保存为 HTML 文件到下载目录") {
-                    onExportHtml(includeAttribution)
-                }
-                ExportOption(Icons.Default.Image, "图片", "渲染为长图并保存到相册") {
-                    onExportImage(includeAttribution)
-                }
-                ExportOption(Icons.Default.PictureAsPdf, "PDF", "通过系统打印对话框导出 PDF") {
-                    onExportPdf(includeAttribution)
-                }
-
-                Spacer(Modifier.height(8.dp))
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "包含 NgaLite 署名",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = includeAttribution,
-                        onCheckedChange = { includeAttribution = it },
-                        enabled = !isExporting,
-                    )
-                }
-
-                if (isExporting) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.size(12.dp))
-                        Text("正在导出…", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isExporting) { Text("关闭") }
-        },
-    )
-}
-
-@Composable
-private fun ExportOption(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    androidx.compose.foundation.layout.Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.size(12.dp))
-        androidx.compose.foundation.layout.Column {
-            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
+         

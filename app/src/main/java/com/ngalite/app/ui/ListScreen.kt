@@ -74,7 +74,8 @@ sealed interface ListUiState {
     data class Success(
         val topics: List<Topic>,
         val isLoadingMore: Boolean = false,
-        val hasMore: Boolean = true
+        val hasMore: Boolean = true,
+        val loadMoreError: String? = null
     ) : ListUiState
 
     data class Error(val message: String) : ListUiState
@@ -178,7 +179,7 @@ class ListViewModel : ViewModel() {
                 if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
-                _state.value = ListUiState.Success(topics = topics)
+                _state.value = ListUiState.Success(topics = topics, hasMore = hasMore)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 if (myGen != generation) return@launch
@@ -223,7 +224,8 @@ class ListViewModel : ViewModel() {
                 _state.value = ListUiState.Success(
                     topics = topics,
                     isLoadingMore = false,
-                    hasMore = hasMore
+                    hasMore = hasMore,
+                    loadMoreError = t.message ?: "加载更多失败"
                 )
             }
         }
@@ -304,7 +306,7 @@ fun ForumThreadsScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(Modifier.height(12.dp))
-                TextButton(onClick = { vm.load() }) {
+                TextButton(onClick = { vm.loadForum(fid) }) {
                     Text("重试")
                 }
             }
@@ -326,6 +328,10 @@ fun ForumThreadsScreen(
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { showLoginDialog = true }) {
                     Text("登录")
+                }
+                if (onBack != null) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onBack) { Text("返回社区") }
                 }
             }
 
@@ -371,6 +377,19 @@ fun ForumThreadsScreen(
                     TopicItem(topic) { onTopicClick(topic.tid) }
                 }
 
+                if (s.topics.isEmpty()) {
+                    item(key = "empty") {
+                        Text(
+                            "该板块暂无帖子",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 // 底部加载指示器
                 if (s.isLoadingMore) {
                     item(key = "loading_more") {
@@ -402,13 +421,41 @@ fun ForumThreadsScreen(
                         )
                     }
                 }
+
+                s.loadMoreError?.let { message ->
+                    item(key = "load_more_error") {
+                        TextButton(
+                            onClick = vm::loadMore,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("$message，点击重试")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (state !is ListUiState.Success && onBack != null) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(top = topSpacing, start = 8.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         }
 
         if (showLoginDialog) {
             LoginDialog(onDismiss = {
                 showLoginDialog = false
-                if (CookieStore.isLogin()) vm.load() else vm.revertFromLoginRequired()
+                if (CookieStore.isLogin()) {
+                    vm.load()
+                } else if (onBack != null) {
+                    onBack()
+                } else {
+                    vm.revertFromLoginRequired()
+                }
             })
         }
     }
@@ -462,7 +509,7 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                     ) { url ->
                         AsyncImage(
                             model = url,
-                            contentDescription = "帖子图片",
+                            contentDescription = null,
                             modifier = Modifier
                                 .size(100.dp)
                                 .clip(RoundedCornerShape(8.dp))

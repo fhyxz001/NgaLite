@@ -41,5 +41,9 @@ object CookieStore {
         NgaApi.clearCookies()
     }
 
-    fun isLogin(): Boolean = get().isNotEmpty()
+    fun isLogin(): Boolean {
+        val cookie = get()
+        return cookie.contains("ngaPassportUid=") &&
+            (cookie.contains("ngaPassportCid=") || cookie.contains("ngaPassportUrlencodedUname="))
+    }
 }

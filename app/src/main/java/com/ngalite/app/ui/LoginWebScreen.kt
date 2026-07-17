@@ -50,6 +50,7 @@ fun LoginWebScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var webView by remember { mutableStateOf<WebView?>(null) }
 
     fun captureCookies(): Boolean {
         val cookies = CookieManager.getInstance().getCookie(LOGIN_URL) ?: ""
@@ -80,103 +81,4 @@ fun LoginWebScreen(onBack: () -> Unit) {
                 title = { Text("NGA 账号登录") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = {
-                        if (captureCookies()) {
-                            Toast.makeText(context, "Cookie 已保存", Toast.LENGTH_SHORT).show()
-                            onBack()
-                        } else {
-                            Toast.makeText(context, "请先在页面中完成登录", Toast.LENGTH_SHORT).show()
-                        }
-                    }) {
-                        Text("完成登录", color = MaterialTheme.colorScheme.onPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding), contentAlignment = Alignment.Center) {
-            AndroidView(
-                factory = { ctx ->
-                    createWebView(ctx) { isLoading = it }.also { wv -> loadPage(wv) }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-            if (isLoading && loadError == null) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-            loadError?.let { msg ->
-                TextButton(onClick = {
-                    // 需要 WebView 引用才能重试，但这里拿不到
-                    // 用户可点返回重新进入
-                }) {
-                    Text("$msg\n请返回后重试", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-}
-
-private val pageClient by lazy { NgaApi.sharedClientBuilder().build() }
-
-private fun fetchLoginPageHtml(): String {
-    val req = Request.Builder()
-        .url(LOGIN_URL)
-        .header("User-Agent", NgaApi.UA)
-        .build()
-    pageClient.newCall(req).execute().use { resp ->
-        if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
-        val bytes = resp.body?.bytes() ?: throw RuntimeException("响应为空")
-        return String(bytes, Charset.forName("GBK"))
-    }
-}
-
-@SuppressLint("SetJavaScriptEnabled")
-private fun createWebView(
-    context: android.content.Context,
-    onLoadingChanged: (Boolean) -> Unit
-): WebView {
-    return WebView(context).apply {
-        settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            userAgentString = NgaApi.UA
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            allowFileAccess = false
-            allowContentAccess = true
-        }
-        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-
-        webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                super.onPageStarted(view, url, favicon)
-                onLoadingChanged(true)
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                onLoadingChanged(false)
-            }
-        }
-
-        webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
-                msg?.let {
-                    Log.d("LoginWebView", "[${it.messageLevel()}] ${it.message()} — ${it.sourceId()}:${it.lineNumber()}")
-                }
-                return super.onConsoleMessage(msg)
-            }
-        }
-    }
-}
+        

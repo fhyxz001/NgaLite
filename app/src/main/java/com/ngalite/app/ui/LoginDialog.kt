@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
@@ -105,7 +108,11 @@ fun LoginDialog(onDismiss: () -> Unit) {
         onDismissRequest = { if (!isLoading) onDismiss() },
         title = { Text("登录", style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 // 账号
                 OutlinedTextField(
                     value = account,
@@ -266,85 +273,4 @@ fun LoginDialog(onDismiss: () -> Unit) {
                                     onDismiss()
                                 } catch (e: NgaApi.LoginException) {
                                     val msg = e.message ?: "登录失败"
-                                    if (NgaApi.isCaptchaError(msg)) {
-                                        if (cs != null) {
-                                            // 验证码错误，刷新
-                                            captchaText = ""
-                                            captchaBitmap = null
-                                            cs.refresh()
-                                            loadCaptchaImage(cs)
-                                            errorMsg = msg
-                                        } else {
-                                            // 首次遇到需要验证码，创建会话并加载图片
-                                            val newCs = NgaApi.CaptchaSession("login")
-                                            captchaSession = newCs
-                                            captchaText = ""
-                                            captchaBitmap = null
-                                            loadCaptchaImage(newCs)
-                                            errorMsg = "请先输入图形验证码，再点击登录"
-                                        }
-                                    } else {
-                                        errorMsg = msg
-                                    }
-                                } catch (e: Exception) {
-                                    errorMsg = "网络错误：${e.message ?: "请稍后重试"}"
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
-                        },
-                        enabled = !isLoading,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Text("登录")
-                        }
-                    }
-                }
-
-                // 粘贴 Cookie 兜底入口
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { showCookieFallback = !showCookieFallback }) {
-                        Text(
-                            if (showCookieFallback) "收起粘贴 Cookie" else "已有 Cookie？粘贴登录",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                    if (CookieStore.isLogin()) {
-                        Spacer(Modifier.size(4.dp))
-                        Text("· 已登录", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                if (showCookieFallback) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = cookieInput,
-                        onValueChange = { cookieInput = it },
-                        label = { Text("粘贴 Cookie") },
-                        singleLine = false,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                        TextButton(onClick = {
-                            CookieStore.save(cookieInput)
-                            onDismiss()
-                        }) { Text("保存 Cookie", fontWeight = FontWeight.SemiBold) }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) { Text("取消") }
-        }
-    )
-}
+                                    if (NgaApi.isCaptchaError(ms

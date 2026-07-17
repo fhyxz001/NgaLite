@@ -21,11 +21,12 @@ jobs:
       - name: Check commit message for release
         id: check_release
         shell: bash
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          echo "Commit message: $COMMIT_MSG"
-          if echo "$COMMIT_MSG" | grep -qP '发布v(\d+\.\d+(?:\.\d+)?)'; then
-            TAG=v$(echo "$COMMIT_MSG" | grep -oP '发布v\K(\d+\.\d+(?:\.\d+)?)')
+          printf 'Commit message: %s\n' "$COMMIT_MSG"
+          if printf '%s\n' "$COMMIT_MSG" | grep -qP '发布v(\d+\.\d+(?:\.\d+)?)'; then
+            TAG=v$(printf '%s\n' "$COMMIT_MSG" | grep -oP '发布v\K(\d+\.\d+(?:\.\d+)?)' | head -n 1)
             echo "is_release=true" >> "$GITHUB_OUTPUT"
             echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
             echo "Detected release: $TAG"

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -23,15 +24,21 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,7 +47,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,21 +86,25 @@ fun CommunityScreen(
                 )
             }
 
-            is CommunityUiState.Error -> Box(
+            is CommunityUiState.Error -> Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     s.message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium
                 )
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { vm.load(context) }) { Text("重试") }
             }
 
             is CommunityUiState.Success -> CommunityContent(
                 state = s,
+                onQueryChange = vm::updateQuery,
                 onCategoryClick = { vm.selectCategory(it) },
                 onForumClick = { forum -> onForumClick(forum.fid) },
                 onFavoriteClick = { vm.toggleFavorite(it.fid) },
@@ -104,16 +117,56 @@ fun CommunityScreen(
 @Composable
 private fun CommunityContent(
     state: CommunityUiState.Success,
+    onQueryChange: (String) -> Unit,
     onCategoryClick: (ForumCategory) -> Unit,
     onForumClick: (Forum) -> Unit,
     onFavoriteClick: (Forum) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    val focusManager = LocalFocusManager.current
+    Column(
         modifier = modifier
             .fillMaxSize()
             .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp)
     ) {
+        OutlinedTextField(
+            value = state.query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("搜索板块") },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
+            trailingIcon = if (state.query.isNotEmpty()) {
+                {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "清空搜索")
+                    }
+                }
+            } else {
+                null
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+
+        if (state.query.isNotBlank()) {
+            ForumGrid(
+                forums = state.searchResults,
+                favoriteFids = state.favoriteFids,
+                emptyMessage = "未找到相关板块",
+                onForumClick = onForumClick,
+                onFavoriteClick = onFavoriteClick,
+                modifier = Modifier.weight(1f)
+            )
+            return@Column
+        }
+
+        Row(modifier = Modifier.weight(1f)) {
         // 左侧分类列表（包含「我的收藏」）
         LazyColumn(
             modifier = Modifier
@@ -135,6 +188,7 @@ private fun CommunityContent(
                             if (selected) MaterialTheme.colorScheme.surface
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 12.dp, vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -155,43 +209,62 @@ private fun CommunityContent(
         }
 
         // 右侧板块网格
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .weight(1f)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            if (state.selectedCategory.forums.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "暂无收藏板块\n点击右下角星标收藏",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+            ForumGrid(
+                forums = state.selectedCategory.forums,
+                favoriteFids = state.favoriteFids,
+                emptyMessage = "暂无收藏板块\n点击右下角星标收藏",
+                onForumClick = onForumClick,
+                onFavoriteClick = onFavoriteClick,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ForumGrid(
+    forums: List<Forum>,
+    favoriteFids: Set<String>,
+    emptyMessage: String,
+    onForumClick: (Forum) -> Unit,
+    onFavoriteClick: (Forum) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        if (forums.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = emptyMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 84.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(
+                    items = forums,
+                    key = { "forum_${it.fid}" }
+                ) { forum ->
+                    ForumGridItem(
+                        forum = forum,
+                        isFavorite = forum.fid in favoriteFids,
+                        onClick = { onForumClick(forum) },
+                        onFavoriteClick = { onFavoriteClick(forum) }
                     )
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 84.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(
-                        items = state.selectedCategory.forums,
-                        key = { "forum_${it.fid}" }
-                    ) { forum ->
-                        ForumGridItem(
-                            forum = forum,
-                            isFavorite = forum.fid in state.favoriteFids,
-                            onClick = { onForumClick(forum) },
-                            onFavoriteClick = { onFavoriteClick(forum) }
-                        )
-                    }
                 }
             }
         }
@@ -226,7 +299,7 @@ private fun ForumGridItem(
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier.heightIn(min = 32.dp)
             )
         }
 
@@ -234,7 +307,7 @@ private fun ForumGridItem(
             onClick = onFavoriteClick,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(26.dp)
+                .size(48.dp)
         ) {
             Icon(
                 imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
