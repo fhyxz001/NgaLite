@@ -5,6 +5,16 @@ import org.jsoup.Jsoup
 /** 用 Jsoup 解析 NGA 的 GBK HTML，提取帖子列表与详情 */
 object NgaParser {
 
+    private const val MAX_PREVIEW_IMAGES = 4
+    private val IMAGE_UBB_REGEX = Regex("""(?is)\[img(?:=[^\]]+)?](.*?)\[/img]""")
+    private val EXCLUDED_PREVIEW_IMAGE_PARTS = listOf(
+        "/post/smile/",
+        "/emoticon/",
+        "/ficon/",
+        "blank.gif",
+        "loading.gif"
+    )
+
     private val TID_REGEX = Regex("""tid=(\d+)""")
     private val BR_REGEX = """(?i)<br\s*/?>""".toRegex()
     private val P_REGEX = """(?i)</p>""".toRegex()
@@ -70,7 +80,7 @@ object NgaParser {
                 images.add(UbbParser.IMG_BASE + path)
             }
         }
-        return images.distinct().take(5)
+        return images.distinct().take(MAX_PREVIEW_IMAGES)
     }
 
     /** 将相对地址补全为绝对地址 */
@@ -83,7 +93,50 @@ object NgaParser {
         }
     }
 
-    /** 解析帖子详情（楼层列表） */
+    /** Extracts images from the original post for topic-list thumbnails. */
+    fun parseMainPostImages(html: String): List<String> {
+        val doc = Jsoup.parse(html)
+        val content = doc.selectFirst("tr.postrow [id^=postcontent]") ?: return emptyList()
+        val images = mutableListOf<String>()
+
+        // Images that NGA has already rendered as HTML in the original post.
+        content.select("img").forEach { image ->
+            val source = sequenceOf("data-src", "data-original", "file", "src")
+                .map { image.attr(it).trim() }
+                .firstOrNull { it.isNotEmpty() }
+                ?: return@forEach
+            normalizeImageUrl(source)?.let(images::add)
+        }
+
+        // Some NGA responses still contain raw [img] UBB tags.
+        val rawText = htmlToText(content.html())
+        IMAGE_UBB_REGEX.findAll(rawText).forEach { match ->
+            normalizeImageUrl(match.groupValues[1])?.let(images::add)
+        }
+
+        return images.distinct().take(MAX_PREVIEW_IMAGES)
+    }
+
+    private fun normalizeImageUrl(source: String): String? {
+        val value = source.trim().replace("&amp;", "&")
+        if (value.isEmpty() || value.startsWith("data:", ignoreCase = true) ||
+            value.startsWith("blob:", ignoreCase = true)
+        ) return null
+        val url = when {
+            value.startsWith("//") -> "https:$value"
+            value.startsWith("http://", ignoreCase = true) ||
+                value.startsWith("https://", ignoreCase = true) -> value
+            value.startsWith("/attachments/", ignoreCase = true) -> "https://img.nga.178.com$value"
+            value.startsWith("./") -> UbbParser.IMG_BASE + value.removePrefix("./")
+            value.startsWith("/") -> "https://bbs.nga.cn$value"
+            else -> UbbParser.IMG_BASE + value
+        }
+        return url.takeUnless { candidate ->
+            EXCLUDED_PREVIEW_IMAGE_PARTS.any { candidate.contains(it, ignoreCase = true) }
+        }
+    }
+
+    /** Parses all floors in a thread detail response. */
     fun parsePosts(html: String): List<Post> = parsePostsFromDoc(Jsoup.parse(html))
 
     private fun parsePostsFromDoc(doc: org.jsoup.nodes.Document): List<Post> {

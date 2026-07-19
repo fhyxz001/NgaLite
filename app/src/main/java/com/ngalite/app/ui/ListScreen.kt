@@ -1,7 +1,9 @@
-package com.ngalite.app.ui
+﻿package com.ngalite.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,12 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -50,12 +54,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
@@ -67,6 +74,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 sealed interface ListUiState {
@@ -95,22 +104,25 @@ class ListViewModel : ViewModel() {
     private var isLoadingMore = false
     private var topics: List<Topic> = emptyList()
 
-    private val _currentForum = MutableStateFlow(Forum("", "加载中"))
+    private val _currentForum = MutableStateFlow(Forum("", "Loading"))
     val currentForum: StateFlow<Forum> = _currentForum
     private var lastAccessibleForum: Forum? = null
     private var loadJob: kotlinx.coroutines.Job? = null
     private var loadMoreJob: kotlinx.coroutines.Job? = null
+    private val previewSemaphore = Semaphore(4)
+    private val previewJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val previewCache = LinkedHashMap<String, List<String>>()
 
-    /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
+    /** 浠ｆ璁℃暟鍣細姣忔 load() 鑷锛岀敤浜庝涪寮冨凡鍙栨秷鍗忕▼鐨勭粨鏋?*/
     private var generation = 0L
 
-    /** switchForum 防抖时间戳，避免快速连续切换导致状态错乱 */
+    /** switchForum 闃叉姈鏃堕棿鎴筹紝閬垮厤蹇€熻繛缁垏鎹㈠鑷寸姸鎬侀敊涔?*/
     private var lastSwitchTime = 0L
     private val switchDebounceMs = 200L
 
     /**
-     * 根据 fid 加载对应板块。用于从社区页进入帖子列表时被动初始化，
-     * 避免旧版在 init 中自动加载导致的启动逻辑耦合。
+     * 根据 fid 鍔犺浇瀵瑰簲鏉垮潡銆傜敤浜庝粠绀惧尯椤佃繘鍏ュ笘瀛愬垪琛ㄦ椂琚姩鍒濆鍖栵紝
+     * 閬垮厤鏃х増鍦?init 涓嚜鍔ㄥ姞杞藉鑷寸殑鍚姩閫昏緫鑰﹀悎銆?
      */
     fun loadForum(targetFid: String) {
         if (targetFid == fid && _state.value !is ListUiState.Loading) return
@@ -125,7 +137,7 @@ class ListViewModel : ViewModel() {
                 }
                 val forum = ForumRepository.allForums.firstOrNull { it.fid == targetFid }
                 if (forum == null) {
-                    _state.value = ListUiState.Error("板块不存在")
+                    _state.value = ListUiState.Error("Forum does not exist")
                     return@launch
                 }
                 if (!forum.requiresLogin()) {
@@ -146,7 +158,7 @@ class ListViewModel : ViewModel() {
         loadForum(forum.fid)
     }
 
-    /** 取消登录后回到上次无需登录的板块 */
+    /** 鍙栨秷鐧诲綍鍚庡洖鍒颁笂娆℃棤闇€鐧诲綍鐨勬澘鍧?*/
     fun revertFromLoginRequired() {
         if (_currentForum.value.requiresLogin() && lastAccessibleForum != null) {
             fid = lastAccessibleForum!!.fid
@@ -161,21 +173,27 @@ class ListViewModel : ViewModel() {
         topics = emptyList()
         loadJob?.cancel()
         loadMoreJob?.cancel()
+        previewJobs.values.forEach { it.cancel() }
+        previewJobs.clear()
         isLoadingMore = false
         val forum = _currentForum.value
         if (forum.requiresLogin() && !CookieStore.isLogin()) {
             _state.value = ListUiState.LoginRequired(forum.name)
             return
         }
-        // 在协程外设置 Loading 状态，避免被旧协程 catch 块覆盖
+        // 鍦ㄥ崗绋嬪璁剧疆 Loading 鐘舵€侊紝閬垮厤琚棫鍗忕▼ catch 鍧楄鐩?
         _state.value = ListUiState.Loading
         val myGen = ++generation
         loadJob = viewModelScope.launch {
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
                 if (myGen != generation) return@launch
-                // 按 tid 去重，避免 NGA 单页返回重复帖子导致 LazyColumn 重复 key 崩溃
-                val newTopics = NgaParser.parseTopicList(html).distinctBy { it.tid }
+                // 鎸?tid 鍘婚噸锛岄伩鍏?NGA 鍗曢〉杩斿洖閲嶅甯栧瓙瀵艰嚧 LazyColumn 閲嶅 key 崩溃
+                val newTopics = NgaParser.parseTopicList(html)
+                    .distinctBy { it.tid }
+                    .map { topic ->
+                        previewCache[topic.tid]?.let { topic.copy(previewImages = it) } ?: topic
+                    }
                 if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
@@ -183,7 +201,7 @@ class ListViewModel : ViewModel() {
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 if (myGen != generation) return@launch
-                _state.value = ListUiState.Error(t.message ?: "未知错误")
+                _state.value = ListUiState.Error(t.message ?: "Unknown error")
             }
         }
     }
@@ -204,11 +222,15 @@ class ListViewModel : ViewModel() {
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
                 if (myGen != generation) return@launch
-                // 过滤掉已存在的 tid（NGA 置顶帖在每页都会重复出现），避免 LazyColumn 重复 key 崩溃
-                val existingTids = snapshot.mapTo(mutableSetOf()) { it.tid }
-                val newTopics = NgaParser.parseTopicList(html).filter { it.tid !in existingTids }
+                // 杩囨护鎺夊凡瀛樺湪鐨?tid（NGA 缃《甯栧湪姣忛〉閮戒細閲嶅鍑虹幇锛夛紝閬垮厤 LazyColumn 閲嶅 key 崩溃
+                val existingTids = topics.mapTo(mutableSetOf()) { it.tid }
+                val newTopics = NgaParser.parseTopicList(html)
+                    .filter { it.tid !in existingTids }
+                    .map { topic ->
+                        previewCache[topic.tid]?.let { topic.copy(previewImages = it) } ?: topic
+                    }
                 if (myGen != generation) return@launch
-                topics = snapshot + newTopics
+                topics = topics + newTopics
                 currentPage = nextPage
                 hasMore = newTopics.isNotEmpty()
                 isLoadingMore = false
@@ -225,9 +247,53 @@ class ListViewModel : ViewModel() {
                     topics = topics,
                     isLoadingMore = false,
                     hasMore = hasMore,
-                    loadMoreError = t.message ?: "加载更多失败"
+                    loadMoreError = t.message ?: "Failed to load more"
                 )
             }
+        }
+    }
+
+    /** Loads up to four images from the original post when its list row becomes visible. */
+    fun requestTopicPreview(tid: String) {
+        if (previewCache.containsKey(tid)) {
+            updateTopicPreview(tid, previewCache.getValue(tid))
+            return
+        }
+        if (previewJobs.containsKey(tid)) return
+
+        val myGeneration = generation
+        previewJobs[tid] = viewModelScope.launch {
+            try {
+                val images = withContext(Dispatchers.IO) {
+                    previewSemaphore.withPermit {
+                        NgaParser.parseMainPostImages(NgaApi.fetchThread(tid))
+                    }
+                }
+                if (myGeneration != generation) return@launch
+                previewCache[tid] = images
+                while (previewCache.size > 200) {
+                    previewCache.remove(previewCache.keys.first())
+                }
+                updateTopicPreview(tid, images)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                // A failed thumbnail request must not make the whole topic list fail.
+            } finally {
+                if (myGeneration == generation) previewJobs.remove(tid)
+            }
+        }
+    }
+
+    private fun updateTopicPreview(tid: String, images: List<String>) {
+        val index = topics.indexOfFirst { it.tid == tid }
+        if (index < 0 || topics[index].previewImages == images) return
+        topics = topics.toMutableList().also { list ->
+            list[index] = list[index].copy(previewImages = images)
+        }
+        val current = _state.value
+        if (current is ListUiState.Success) {
+            _state.value = current.copy(topics = topics)
         }
     }
 }
@@ -242,22 +308,23 @@ fun ForumThreadsScreen(
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
+    var isFavorite by remember(currentForum.fid) { mutableStateOf(FavoriteStore.isFavorite(currentForum.fid)) }
     var showLoginDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    /** 进入页面时根据 fid 加载板块 */
+    /** 杩涘叆椤甸潰鏃舵牴鎹?fid 加载板块 */
     LaunchedEffect(fid) {
         vm.loadForum(fid)
     }
 
-    // 切换板块后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 或显示异常
+    // 切换板块后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 鎴栨樉绀哄紓甯?
     LaunchedEffect(currentForum) {
         if (listState.layoutInfo.totalItemsCount > 0) {
             listState.scrollToItem(0)
         }
     }
 
-    // 滚动到底部时自动加载更多
+    // 婊氬姩鍒板簳閮ㄦ椂鑷姩鍔犺浇鏇村
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -266,7 +333,7 @@ fun ForumThreadsScreen(
             lastVisible to totalItems
         }
             .filter { (last, total) -> last >= total - 3 && total > 0 }
-            .drop(1) // 跳过初始值
+            .drop(1) // 璺宠繃鍒濆鍊?
             .collect {
                 val s = vm.state.value
                 if (s is ListUiState.Success && s.hasMore && !s.isLoadingMore) {
@@ -321,7 +388,7 @@ fun ForumThreadsScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    "访问 ${s.forumName} 需要登录",
+                    "Access to ${s.forumName} requires login",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -337,7 +404,10 @@ fun ForumThreadsScreen(
 
             is ListUiState.Success -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color(0xFFF3F3F3)),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -370,17 +440,33 @@ fun ForumThreadsScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                        IconButton(
+                            onClick = {
+                                FavoriteStore.toggle(currentForum.fid)
+                                isFavorite = FavoriteStore.isFavorite(currentForum.fid)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
+                                contentDescription = if (isFavorite) "??????" else "????",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
 
                 items(s.topics, key = { it.tid }) { topic ->
-                    TopicItem(topic) { onTopicClick(topic.tid) }
+                    TopicItem(
+                        topic = topic,
+                        onClick = { onTopicClick(topic.tid) },
+                        onPreviewNeeded = { vm.requestTopicPreview(topic.tid) }
+                    )
                 }
 
                 if (s.topics.isEmpty()) {
                     item(key = "empty") {
                         Text(
-                            "该板块暂无帖子",
+                            "There are no topics in this forum yet",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 48.dp),
@@ -390,7 +476,7 @@ fun ForumThreadsScreen(
                     }
                 }
 
-                // 底部加载指示器
+                // 搴曢儴鍔犺浇鎸囩ず鍣?
                 if (s.isLoadingMore) {
                     item(key = "loading_more") {
                         Box(
@@ -411,7 +497,7 @@ fun ForumThreadsScreen(
                 if (!s.hasMore) {
                     item(key = "no_more") {
                         Text(
-                            "没有更多了",
+                            "No more content",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 16.dp),
@@ -428,7 +514,7 @@ fun ForumThreadsScreen(
                             onClick = vm::loadMore,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("$message，点击重试")
+                            Text("$message, tap to retry")
                         }
                     }
                 }
@@ -462,8 +548,14 @@ fun ForumThreadsScreen(
 }
 
 @Composable
-private fun TopicItem(topic: Topic, onClick: () -> Unit) {
-    // 缓存热度计算结果，避免滚动时重复计算
+private fun TopicItem(
+    topic: Topic,
+    onClick: () -> Unit,
+    onPreviewNeeded: () -> Unit
+) {
+    var previewImageUrl by remember(topic.tid) { mutableStateOf<String?>(null) }
+    LaunchedEffect(topic.tid) { onPreviewNeeded() }
+    // 缂撳瓨鐑害璁＄畻缁撴灉锛岄伩鍏嶆粴鍔ㄦ椂閲嶅璁＄畻
     val colorScheme = MaterialTheme.colorScheme
     val (replies, badgeColor, badgeContainer) = remember(topic.replies, colorScheme) {
         val count = topic.replies.toIntOrNull() ?: 0
@@ -483,9 +575,9 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp)
     ) {
         Column(Modifier.padding(14.dp)) {
             Text(
@@ -497,37 +589,21 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             if (topic.previewImages.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        topic.previewImages,
-                        key = { url -> "${topic.tid}_preview_$url" }
-                    ) { url ->
-                        AsyncImage(
-                            model = url,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(100.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
+                TopicPreviewGrid(
+                    images = topic.previewImages,
+                    onImageClick = { previewImageUrl = it },
+                    modifier = Modifier.padding(top = 10.dp)
+                )
             }
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 回复数徽标
+                // 鍥炲鏁板窘鏍?
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(badgeContainer)
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
@@ -555,4 +631,82 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
             }
         }
     }
+
+    previewImageUrl?.let { url ->
+        Dialog(
+            onDismissRequest = { previewImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { previewImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Topic image preview",
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopicPreviewGrid(
+    images: List<String>,
+    onImageClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val previews = images.take(4)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (previews.size == 1) {
+            TopicPreviewImage(
+                url = previews.first(),
+                onClick = { onImageClick(previews.first()) },
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+            )
+        } else {
+            previews.chunked(2).forEach { rowImages ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    rowImages.forEach { url ->
+                        TopicPreviewImage(
+                            url = url,
+                            onClick = { onImageClick(url) },
+                            modifier = Modifier.weight(1f).aspectRatio(1.35f)
+                        )
+                    }
+                    if (rowImages.size == 1) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopicPreviewImage(
+    url: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AsyncImage(
+        model = url,
+        contentDescription = "Original post image",
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentScale = ContentScale.Crop
+    )
 }

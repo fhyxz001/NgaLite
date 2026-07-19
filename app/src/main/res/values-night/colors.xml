@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The requested launch screen remains white in dark mode as well. -->
+    <color name="app_startup_background">#FCFCFC</color>
+</resources>

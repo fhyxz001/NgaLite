@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -78,13 +79,13 @@ fun SettingsScreen(
         loggedAccount = CookieStore.getAccountName()
     }
 
-    /** 退出登录：清空 Cookie 与账号信息 */
+    /** 閫€鍑虹櫥褰曪細娓呯┖ Cookie 涓庤处鍙蜂俊鎭?*/
     fun logout() {
         CookieStore.clear()
         refreshLoginState()
     }
 
-    // ---- 检查更新相关状态 ----
+    // ---- 妫€鏌ユ洿鏂扮浉鍏崇姸鎬?----
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateManager.UpdateResult?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -92,7 +93,7 @@ fun SettingsScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    /** 获取当前应用版本名（缓存结果避免每次重组都查询 PackageManager） */
+    /** 鑾峰彇褰撳墠搴旂敤鐗堟湰鍚嶏紙缂撳瓨缁撴灉閬垮厤姣忔閲嶇粍閮芥煡璇?PackageManager锛?*/
     val currentVersionName = remember {
         try {
             val pm = context.packageManager
@@ -102,7 +103,7 @@ fun SettingsScreen(
         }
     }
 
-    /** 触发检查更新 */
+    /** 瑙﹀彂妫€鏌ユ洿鏂?*/
     fun triggerCheckUpdate() {
         if (isCheckingUpdate) return
         isCheckingUpdate = true
@@ -113,7 +114,7 @@ fun SettingsScreen(
         }
     }
 
-    /** 确认更新后开始下载 */
+    /** 纭鏇存柊鍚庡紑濮嬩笅杞?*/
     fun startDownload(url: String) {
         updateResult = null
         isDownloading = true
@@ -128,7 +129,7 @@ fun SettingsScreen(
                 UpdateManager.installApk(context, file)
             } catch (e: Exception) {
                 isDownloading = false
-                downloadError = e.message ?: "下载失败，挂梯子试试"
+                downloadError = e.message ?: "\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5"
             }
         }
     }
@@ -137,6 +138,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Color(0xFFF3F3F3))
             .verticalScroll(scrollState)
             .padding(horizontal = 16.dp)
             .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp),
@@ -144,10 +146,10 @@ fun SettingsScreen(
     ) {
         Text(
             text = "设置",
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
         )
 
             // ==========================================
@@ -158,12 +160,12 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
 
             if (logged) {
-                // ---- 已登录 ----
+                // ---- 宸茬櫥褰?----
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
@@ -196,14 +198,14 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                loggedAccount.ifBlank { "已登录" },
+                                loggedAccount.ifBlank { "\u5df2\u767b\u5f55" },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
                         }
                         OutlinedButton(
                             onClick = { logout() },
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Logout,
@@ -211,18 +213,18 @@ fun SettingsScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text("退出", fontWeight = FontWeight.Medium)
+                            Text("\u9000\u51fa\u767b\u5f55", fontWeight = FontWeight.Medium)
                         }
                     }
                 }
             } else {
-                // ---- 未登录 ----
+                // ---- 鏈櫥褰?----
                 SettingsCard {
                     SettingsRow(
                         icon = Icons.AutoMirrored.Filled.Login,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = "登录 NGA 账号",
-                        subtitle = "账号密码登录，自动处理验证码",
+                        subtitle = "\u4f7f\u7528\u8d26\u53f7\u5bc6\u7801\u767b\u5f55\uff0c\u9a8c\u8bc1\u7801\u5c06\u81ea\u52a8\u5904\u7406",
                         onClick = { showLogin = true }
                     )
                     SettingsDivider()
@@ -230,7 +232,7 @@ fun SettingsScreen(
                         icon = Icons.Default.ContentPaste,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         title = "粘贴 Cookie 登录",
-                        subtitle = "从浏览器复制 Cookie 字符串粘贴",
+                        subtitle = "\u7c98\u8d34\u4ece\u6d4f\u89c8\u5668\u590d\u5236\u7684 Cookie \u5b57\u7b26\u4e32",
                         onClick = { showCookieDialog = true }
                     )
                 }
@@ -249,7 +251,7 @@ fun SettingsScreen(
                 SettingsRow(
                     icon = Icons.Default.Update,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "检查更新",
+                    title = "\u68c0\u67e5\u66f4\u65b0",
                     subtitle = "当前版本 v${currentVersionName}",
                     onClick = { triggerCheckUpdate() },
                     trailing = {
@@ -274,11 +276,9 @@ fun SettingsScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -290,8 +290,8 @@ fun SettingsScreen(
                         model = "file:///android_asset/logo.jpg",
                         contentDescription = "NgaLite",
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(20.dp))
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -308,7 +308,7 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "轻量级 NGA 论坛客户端",
+                        "\u8f7b\u91cf\u7ea7 NGA \u8bba\u575b\u5ba2\u6237\u7aef",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -318,7 +318,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-    // ---- 登录对话框 ----
+    // ---- 鐧诲綍瀵硅瘽妗?----
     if (showLogin) {
         LoginDialog(onDismiss = {
             showLogin = false
@@ -326,7 +326,7 @@ fun SettingsScreen(
         })
     }
 
-    // ---- 粘贴 Cookie 对话框 ----
+    // ---- 粘贴 Cookie 瀵硅瘽妗?----
     if (showCookieDialog) {
         AlertDialog(
             onDismissRequest = { showCookieDialog = false },
@@ -334,7 +334,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        "从浏览器复制 Cookie 字符串粘贴到下方：",
+                        "\u8bf7\u5728\u4e0b\u65b9\u7c98\u8d34\u4ece\u6d4f\u89c8\u5668\u590d\u5236\u7684 Cookie \u5b57\u7b26\u4e32\u3002",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -342,7 +342,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = cookieInput,
                         onValueChange = { cookieInput = it },
-                        label = { Text("Cookie") },
+                        label = { Text("Cookie \u5b57\u7b26\u4e32") },
                         singleLine = false,
                         maxLines = 5,
                         modifier = Modifier.fillMaxWidth()
@@ -362,11 +362,11 @@ fun SettingsScreen(
         )
     }
 
-    // ---- 检查更新结果对话框 ----
+    // ---- 妫€鏌ユ洿鏂扮粨鏋滃璇濇 ----
     updateResult?.let { result ->
         AlertDialog(
             onDismissRequest = { updateResult = null },
-            title = { Text("检查更新", style = MaterialTheme.typography.titleLarge) },
+            title = { Text("\u68c0\u67e5\u66f4\u65b0", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column {
                     Text(
@@ -383,7 +383,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.outline
                         )
                         Text(
-                            "最新版本：v${result.latestVersion}",
+                            "\u6700\u65b0\u7248\u672c\uff1av${result.latestVersion}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -404,7 +404,7 @@ fun SettingsScreen(
         )
     }
 
-    // ---- 下载进度对话框 ----
+    // ---- 涓嬭浇杩涘害瀵硅瘽妗?----
     if (isDownloading) {
         AlertDialog(
             onDismissRequest = { },
@@ -431,7 +431,7 @@ fun SettingsScreen(
         )
     }
 
-    // ---- 下载失败提示对话框 ----
+    // ---- 涓嬭浇澶辫触鎻愮ず瀵硅瘽妗?----
     downloadError?.let { error ->
         AlertDialog(
             onDismissRequest = { downloadError = null },
@@ -444,44 +444,42 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { downloadError = null }) { Text("知道了") }
+                TextButton(onClick = { downloadError = null }) { Text("\u786e\u5b9a") }
             }
         )
     }
 }
 
 // ==============================================================================
-// 子组件
+// 瀛愮粍浠?
 // ==============================================================================
 
-/** 分组标题 */
+/** 鍒嗙粍鏍囬 */
 @Composable
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp)
     )
 }
 
-/** 分组的卡片容器 */
+/** 鍒嗙粍鐨勫崱鐗囧鍣?*/
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
     }
 }
 
-/** 设置行：图标 + 标题/副标题 + 可选的尾部内容 + 右箭头 */
+/** 设置行：图标 + 鏍囬/鍓爣棰?+ 鍙€夌殑灏鹃儴鍐呭 + 鍙崇澶?*/
 @Composable
 private fun SettingsRow(
     icon: ImageVector,
@@ -500,9 +498,9 @@ private fun SettingsRow(
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconTint.copy(alpha = 0.1f)),
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(iconTint.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -538,7 +536,7 @@ private fun SettingsRow(
     }
 }
 
-/** 设置行之间的分隔线 */
+/** 璁剧疆琛屼箣闂寸殑鍒嗛殧绾?*/
 @Composable
 private fun SettingsDivider() {
     HorizontalDivider(

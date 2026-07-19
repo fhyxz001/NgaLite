@@ -4,13 +4,21 @@ import android.util.Log
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Settings
@@ -18,12 +26,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -51,7 +62,7 @@ object Routes {
 fun NavGraph() {
     val nav = rememberNavController()
 
-    /** 避免单次导航异常导致界面崩溃，不跨操作吞掉正常导航。 */
+    /** 閬垮厤鍗曟瀵艰埅寮傚父瀵艰嚧鐣岄潰宕╂簝锛屼笉璺ㄦ搷浣滃悶鎺夋甯稿鑸€?*/
     fun navSafe(block: () -> Unit) {
         runCatching { block() }.onFailure { e ->
             Log.e("NavGraph", "导航操作失败", e)
@@ -59,29 +70,61 @@ fun NavGraph() {
     }
 
     /**
-     * 安全获取 ForumThreads 路由的 backStackEntry，用于 Detail 页读取当前板块名称。
+     * 安全获取 ForumThreads 璺敱鐨?backStackEntry锛岀敤浜?Detail 椤佃鍙栧綋鍓嶆澘鍧楀悕绉般€?
      */
     fun safeForumThreadsEntry(navController: NavController) = runCatching {
         navController.getBackStackEntry(Routes.FORUM_THREADS)
     }.getOrNull()
 
+    val tabTransitionMs = 180
+    val pageEnterMs = 280
+    val pageExitMs = 220
+
     fun AnimatedContentTransitionScope<*>.tabEnter(): EnterTransition =
-        fadeIn(animationSpec = tween(200))
+        fadeIn(animationSpec = tween(tabTransitionMs, easing = LinearOutSlowInEasing)) +
+            scaleIn(
+                initialScale = 0.985f,
+                animationSpec = tween(tabTransitionMs, easing = LinearOutSlowInEasing)
+            )
 
     fun AnimatedContentTransitionScope<*>.tabExit(): ExitTransition =
-        fadeOut(animationSpec = tween(200))
+        fadeOut(animationSpec = tween(120, easing = FastOutLinearInEasing)) +
+            scaleOut(
+                targetScale = 0.99f,
+                animationSpec = tween(120, easing = FastOutLinearInEasing)
+            )
 
     fun AnimatedContentTransitionScope<*>.pageEnter(): EnterTransition =
-        slideInHorizontally(animationSpec = tween(300)) { it } + fadeIn(animationSpec = tween(250))
+        slideInHorizontally(
+            initialOffsetX = { it / 4 },
+            animationSpec = tween(pageEnterMs, easing = LinearOutSlowInEasing)
+        ) + fadeIn(animationSpec = tween(180, easing = LinearOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.pageExit(): ExitTransition =
-        slideOutHorizontally(animationSpec = tween(300)) { -it / 4 } + fadeOut(animationSpec = tween(200))
+        slideOutHorizontally(
+            targetOffsetX = { -it / 12 },
+            animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
+        ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)) +
+            scaleOut(
+                targetScale = 0.99f,
+                animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
+            )
 
     fun AnimatedContentTransitionScope<*>.pagePopEnter(): EnterTransition =
-        slideInHorizontally(animationSpec = tween(300)) { -it / 4 } + fadeIn(animationSpec = tween(200))
+        slideInHorizontally(
+            initialOffsetX = { -it / 12 },
+            animationSpec = tween(pageEnterMs, easing = LinearOutSlowInEasing)
+        ) + fadeIn(animationSpec = tween(180, easing = LinearOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.pagePopExit(): ExitTransition =
-        slideOutHorizontally(animationSpec = tween(300)) { it } + fadeOut(animationSpec = tween(250))
+        slideOutHorizontally(
+            targetOffsetX = { it / 4 },
+            animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
+        ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)) +
+            scaleOut(
+                targetScale = 0.99f,
+                animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
+            )
 
     val currentBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -92,8 +135,24 @@ fun NavGraph() {
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 14.dp,
+                            shape = RoundedCornerShape(28.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.18f),
+                            spotColor = Color.Black.copy(alpha = 0.12f),
+                        )
+                        .clip(RoundedCornerShape(28.dp))
+                        .border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.52f),
+                            shape = RoundedCornerShape(28.dp),
+                        ),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 0.dp
                 ) {
                     NavigationBarItem(
                         selected = currentRoute == Routes.COMMUNITY,
@@ -117,7 +176,14 @@ fun NavGraph() {
                                 contentDescription = "社区"
                             )
                         },
-                        label = { Text("社区") }
+                        label = null,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                     NavigationBarItem(
                         selected = currentRoute == Routes.SETTINGS,
@@ -141,7 +207,14 @@ fun NavGraph() {
                                 contentDescription = "设置"
                             )
                         },
-                        label = { Text("设置") }
+                        label = null,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
@@ -216,7 +289,7 @@ fun NavGraph() {
                 popExitTransition = { pagePopExit() }
             ) { backStackEntry ->
                 val tid = backStackEntry.arguments?.getString("tid").orEmpty()
-                // 从 ForumThreads 的 ListViewModel 获取当前板块名称，避免通过路由传递
+                // 浠?ForumThreads 鐨?ListViewModel 鑾峰彇褰撳墠鏉垮潡鍚嶇О锛岄伩鍏嶉€氳繃璺敱浼犻€?
                 val forumName = safeForumThreadsEntry(nav)?.let { entry ->
                     viewModel<ListViewModel>(entry).currentForum.value.name
                 } ?: ""

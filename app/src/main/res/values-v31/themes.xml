@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.NgaLite" parent="android:Theme.Material.Light.NoActionBar">
-        <!-- Android 8-11 launch screen: white background with the app logo centered. -->
+        <!-- Android 12+ system splash screen: white background with the app logo centered. -->
+        <item name="android:windowSplashScreenBackground">@color/app_startup_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:windowSplashScreenAnimationDuration">200</item>
         <item name="android:windowBackground">@drawable/splash_screen</item>
         <item name="android:windowDisablePreview">false</item>
         <item name="android:windowIsTranslucent">false</item>

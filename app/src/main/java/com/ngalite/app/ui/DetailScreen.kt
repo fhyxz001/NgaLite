@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
@@ -85,21 +87,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private val PostTextBackground = Color(0xFFF3F3F3)
+
 sealed interface DetailUiState {
     data object Loading : DetailUiState
     data class Success(
         val title: String,
         val forumName: String,
         val originalPost: Post?,
-        val comments: List<Post>
+        val comments: List<Post>,
+        val page: Int,
+        val hasNextPage: Boolean,
+        val isPageLoading: Boolean = false
     ) : DetailUiState
 
     data class Error(val message: String) : DetailUiState
 }
 
 /**
- * 全局缓存 emoji 资源存在性集合，避免每个 [InlineRichText] 实例各自扫描 assets。
- * 在首次访问时通过 [Lazy] 初始化，后续所有 Composable 共享同一份。
+ * 全局缓存 emoji 资源存在性集合，避免每个 [InlineRichText] 瀹炰緥鍚勮嚜鎵弿 assets銆?
+ * 鍦ㄩ娆¤闂椂閫氳繃 [Lazy] 鍒濆鍖栵紝鍚庣画鎵€鏈?Composable 鍏变韩鍚屼竴浠姐€?
  */
 private val emojiExistsCache: Map<String, Boolean> by lazy {
     val result = mutableMapOf<String, Boolean>()
@@ -122,28 +129,67 @@ class DetailViewModel : ViewModel() {
     private var currentTid: String = ""
     private var currentForumName: String = ""
 
-    /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
+    /** 浠ｆ璁℃暟鍣細姣忔 load() 鑷锛岀敤浜庝涪寮冨凡鍙栨秷鍗忕▼鐨勭粨鏋?*/
     private var loadGeneration = 0L
+
+    private companion object {
+        // NGA read.php renders 20 floors per page. The supplied P1 fixture has seven floors,
+        // which correctly identifies it as the final page without an unnecessary request.
+        const val POSTS_PER_PAGE = 20
+    }
 
     fun load(tid: String, forumName: String = "") {
         currentTid = tid
         currentForumName = forumName
+        loadPage(1, initialLoad = true)
+    }
+
+    fun loadPage(page: Int) {
+        loadPage(page, initialLoad = false)
+    }
+
+    private fun loadPage(page: Int, initialLoad: Boolean) {
+        val targetPage = page.coerceAtLeast(1)
+        if (currentTid.isBlank()) return
+        val previous = _state.value as? DetailUiState.Success
+        if (!initialLoad && previous?.isPageLoading == true) return
+
         val myGen = ++loadGeneration
         viewModelScope.launch {
-            _state.value = DetailUiState.Loading
+            if (initialLoad || previous == null) {
+                _state.value = DetailUiState.Loading
+            } else {
+                _state.value = previous.copy(isPageLoading = true)
+            }
             try {
-                val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(tid) }
+                val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(currentTid, targetPage) }
                 if (myGen != loadGeneration) return@launch
                 val result = withContext(Dispatchers.Default) { NgaParser.parseDetail(html) }
                 if (myGen != loadGeneration) return@launch
-                val originalPost = result.posts.firstOrNull()
-                val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
-                _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
+
+                // An exact 20-floor final page has no reliable next-page marker in NGA's static HTML.
+                // When page N + 1 is empty, retain N and mark it as final instead of showing an error.
+                if (result.posts.isEmpty() && previous != null && targetPage > previous.page) {
+                    _state.value = previous.copy(hasNextPage = false, isPageLoading = false)
+                    return@launch
+                }
+
+                val originalPost = if (targetPage == 1) result.posts.firstOrNull() else null
+                val comments = if (targetPage == 1) result.posts.drop(1) else result.posts
+                _state.value = DetailUiState.Success(
+                    title = result.title,
+                    forumName = currentForumName,
+                    originalPost = originalPost,
+                    comments = comments,
+                    page = targetPage,
+                    hasNextPage = true
+                )
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (t: Throwable) {
                 if (myGen != loadGeneration) return@launch
-                _state.value = DetailUiState.Error(t.message ?: "未知错误")
+                _state.value = previous?.copy(isPageLoading = false)
+                    ?: DetailUiState.Error(t.message ?: "????")
             }
         }
     }
@@ -167,7 +213,7 @@ class DetailViewModel : ViewModel() {
         return markdown
     }
 
-    /** 导出 HTML 到下载目录 */
+    /** 导出 HTML 鍒颁笅杞界洰褰?*/
     fun exportHtml(
         context: Context,
         includeAttribution: Boolean,
@@ -175,7 +221,7 @@ class DetailViewModel : ViewModel() {
     ) {
         val content = exportContent()
         if (content == null) {
-            onResult(false, "内容未加载完成")
+            onResult(false, "Content is not ready")
             return
         }
         viewModelScope.launch {
@@ -194,7 +240,7 @@ class DetailViewModel : ViewModel() {
         }
     }
 
-    /** 导出图片到相册（按手机屏幕宽度渲染） */
+    /** 瀵煎嚭鍥剧墖鍒扮浉鍐岋紙鎸夋墜鏈哄睆骞曞搴︽覆鏌擄級 */
     fun exportImage(
         context: Context,
         includeAttribution: Boolean,
@@ -202,7 +248,7 @@ class DetailViewModel : ViewModel() {
     ) {
         val content = exportContent()
         if (content == null) {
-            onResult(false, "内容未加载完成")
+            onResult(false, "Content is not ready")
             return
         }
         viewModelScope.launch {
@@ -226,7 +272,7 @@ class DetailViewModel : ViewModel() {
         }
     }
 
-    /** 通过系统打印对话框导出 PDF */
+    /** 閫氳繃绯荤粺鎵撳嵃瀵硅瘽妗嗗鍑?PDF */
     fun exportPdf(context: Context, includeAttribution: Boolean): String? {
         val content = exportContent() ?: return null
         viewModelScope.launch {
@@ -239,7 +285,7 @@ class DetailViewModel : ViewModel() {
                     ExportManager.printPdf(context, jobName, inlined)
                 }
             } catch (e: Exception) {
-                // 打印框架已接管 UI，异常仅记录
+                // 鎵撳嵃妗嗘灦宸叉帴绠?UI，异常仅记录
             }
         }
         return content.title
@@ -256,6 +302,10 @@ fun DetailScreen(
 ) {
     LaunchedEffect(tid, forumName) { vm.load(tid, forumName) }
     val state by vm.state.collectAsState()
+    val listState = rememberLazyListState()
+    LaunchedEffect((state as? DetailUiState.Success)?.page) {
+        if (state is DetailUiState.Success) listState.scrollToItem(0)
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
@@ -265,7 +315,7 @@ fun DetailScreen(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            android.widget.Toast.makeText(context, "需要存储权限才能导出", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Storage permission is required to export", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -319,64 +369,81 @@ fun DetailScreen(
                 }
             }
 
-            is DetailUiState.Success -> LazyColumn(
-                Modifier
+            is DetailUiState.Success -> Box(
+                modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topSpacing + 12.dp, bottom = 12.dp)
+                    .padding(padding)
             ) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回"
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = topSpacing + 12.dp,
+                        bottom = 92.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "\u5206\u4eab")
+                            }
+                            Text(
+                                s.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            IconButton(
+                                onClick = { showExportDialog = true },
+                                enabled = !isExporting && !s.isPageLoading
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "??")
+                            }
+                        }
+                    }
+
+                    s.originalPost?.let { post ->
+                        item { OriginalPostCard(post) { fullScreenImageUrl = it } }
+                    }
+
+                    if (s.comments.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = if (s.page == 1) "\u5168\u90e8\u56de\u590d" else "P${s.page} \u9875\u56de\u590d",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
                             )
                         }
-                        Text(
-                            s.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        IconButton(
-                            onClick = { showExportDialog = true },
-                            enabled = state is DetailUiState.Success && !isExporting
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = "分享")
-                        }
+                    }
+
+                    itemsIndexed(s.comments, key = { index, post -> "${s.page}-$index-${post.floor}-${post.author}" }) { _, post ->
+                        CommentCard(post) { fullScreenImageUrl = it }
                     }
                 }
 
-                s.originalPost?.let { post ->
-                    item {
-                        OriginalPostCard(post) { fullScreenImageUrl = it }
-                    }
-                }
-
-                if (s.comments.isNotEmpty()) {
-                    item {
-                        Text(
-                            "全部评论",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)
-                        )
-                    }
-                }
-
-                itemsIndexed(s.comments, key = { index, post -> "$index-${post.floor}-${post.author}" }) { _, post ->
-                    CommentCard(post) { fullScreenImageUrl = it }
-                }
+                ThreadPager(
+                    page = s.page,
+                    canGoNext = s.hasNextPage,
+                    isLoading = s.isPageLoading,
+                    onPrevious = { vm.loadPage(s.page - 1) },
+                    onNext = { vm.loadPage(s.page + 1) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                )
             }
         }
     }
@@ -387,7 +454,7 @@ fun DetailScreen(
             isExporting = isExporting,
             onExportMarkdown = { includeAttribution ->
                 vm.exportMarkdown(context)
-                toast("Markdown 已复制到剪贴板")
+                toast("Markdown copied to clipboard")
                 showExportDialog = false
             },
             onExportHtml = { includeAttribution ->
@@ -410,7 +477,7 @@ fun DetailScreen(
             },
             onExportPdf = { includeAttribution ->
                 vm.exportPdf(context, includeAttribution)
-                toast("已打开打印对话框，可选择保存为 PDF")
+                toast("Print dialog opened. You can save the thread as a PDF.")
                 showExportDialog = false
             }
         )
@@ -440,13 +507,59 @@ fun DetailScreen(
     }
 }
 
+
+@Composable
+private fun ThreadPager(
+    page: Int,
+    canGoNext: Boolean,
+    isLoading: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onPrevious, enabled = page > 1 && !isLoading) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(2.dp))
+                Text("\u4e0a\u4e00\u9875")
+            }
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Text("P$page", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            TextButton(onClick = onNext, enabled = canGoNext && !isLoading) {
+                Text("\u4e0b\u4e00\u9875")
+                Spacer(Modifier.size(2.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
 @Composable
 private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = PostTextBackground
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             PostContent(post.contentNodes, onImageClick)
@@ -457,7 +570,7 @@ private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
             )
 
             Text(
-                "${post.date} · 楼主${if (post.views != "0") " · ${post.views} 浏览" else ""}",
+                "${post.date} · 楼主${if (post.views != "0") " · ${post.views} 娴忚" else ""}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -470,10 +583,10 @@ private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .padding(vertical = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = PostTextBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
@@ -508,13 +621,13 @@ private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "${post.date}${if (post.views != "0") " · ${post.views} 浏览" else ""}",
+                    "${post.date}${if (post.views != "0") " · ${post.views} 娴忚" else ""}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (post.likes != "0") {
                     Text(
-                        "赞 ${post.likes}",
+                        "Likes ${post.likes}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.tertiary
                     )
@@ -525,7 +638,7 @@ private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
 }
 
 /**
- * 渲染正文内容节点：连续的文本与表情合并为内联富文本，图片/引用单独成块。
+ * 娓叉煋姝ｆ枃鍐呭鑺傜偣锛氳繛缁殑鏂囨湰涓庤〃鎯呭悎骞朵负鍐呰仈瀵屾枃鏈紝鍥剧墖/寮曠敤鍗曠嫭鎴愬潡銆?
  */
 @Composable
 private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit) {
@@ -541,7 +654,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
     val groupedNodes = remember(nodes) { groupContentNodes(nodes) }
 
     groupedNodes.forEachIndexed { index, group ->
-        // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
+        // 使用 key 闃叉 Compose 浣嶇疆璁板繂鍖栧湪鑺傜偣绫诲瀷鍙樺寲鏃堕敊閰嶇姸鎬?
         key(index, group::class) {
             when (group) {
                 is NodeGroup.Inline -> {
@@ -560,7 +673,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { onImageClick(group.url) },
                         contentScale = ContentScale.FillWidth
@@ -572,7 +685,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                             .fillMaxWidth()
                             .height(IntrinsicSize.Max)
                             .padding(top = 12.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Box(
@@ -603,14 +716,14 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
     }
 }
 
-/** 节点分组结果，用于缓存 PostContent 的遍历 */
+/** 鑺傜偣鍒嗙粍缁撴灉锛岀敤浜庣紦瀛?PostContent 鐨勯亶鍘?*/
 private sealed class NodeGroup {
     class Inline(val nodes: List<ContentNode>) : NodeGroup()
     data class Image(val url: String) : NodeGroup()
     data class Quote(val content: String) : NodeGroup()
 }
 
-/** 将内容节点列表分组：连续的文本/表情合并为 Inline，图片和引用各自独立 */
+/** 灏嗗唴瀹硅妭鐐瑰垪琛ㄥ垎缁勶細杩炵画鐨勬枃鏈?琛ㄦ儏鍚堝苟涓?Inline锛屽浘鐗囧拰寮曠敤鍚勮嚜鐙珛 */
 private fun groupContentNodes(nodes: List<ContentNode>): List<NodeGroup> {
     if (nodes.isEmpty()) return emptyList()
     val groups = mutableListOf<NodeGroup>()
@@ -638,8 +751,8 @@ private fun groupContentNodes(nodes: List<ContentNode>): List<NodeGroup> {
 }
 
 /**
- * 将连续的文本和表情节点渲染为内联富文本，表情图片从 assets 加载。
- * 使用 FlowRow 实现文本与表情图片的行内混排。
+ * 灏嗚繛缁殑鏂囨湰鍜岃〃鎯呰妭鐐规覆鏌撲负鍐呰仈瀵屾枃鏈紝琛ㄦ儏鍥剧墖浠?assets 鍔犺浇銆?
+ * 使用 FlowRow 瀹炵幇鏂囨湰涓庤〃鎯呭浘鐗囩殑琛屽唴娣锋帓銆?
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -660,7 +773,7 @@ private fun InlineRichText(nodes: List<ContentNode>) {
         horizontalArrangement = Arrangement.Start
     ) {
         nodes.forEachIndexed { index, node ->
-            // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
+            // 使用 key 闃叉 Compose 浣嶇疆璁板繂鍖栧湪鑺傜偣绫诲瀷鍙樺寲鏃堕敊閰嶇姸鎬?
             key(index, node::class) {
                 when (node) {
                     is ContentNode.Text -> {
@@ -715,22 +828,22 @@ private fun ExportDialog(
         text = {
             androidx.compose.foundation.layout.Column {
                 Text(
-                    "选择导出格式，导出内容已适配手机屏幕展示",
+                    "\u9009\u62e9\u5bfc\u51fa\u683c\u5f0f",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
 
-                ExportOption(Icons.Default.Code, "Markdown", "复制为 Markdown 文本") {
+                ExportOption(Icons.Default.Code, "Markdown", "\u590d\u5236\u4e3a Markdown \u6587\u672c") {
                     onExportMarkdown(includeAttribution)
                 }
-                ExportOption(Icons.Default.Html, "HTML", "保存为 HTML 文件到下载目录") {
+                ExportOption(Icons.Default.Html, "HTML", "\u4fdd\u5b58 HTML \u6587\u4ef6\u5230\u4e0b\u8f7d\u76ee\u5f55") {
                     onExportHtml(includeAttribution)
                 }
-                ExportOption(Icons.Default.Image, "图片", "渲染为长图并保存到相册") {
+                ExportOption(Icons.Default.Image, "\u56fe\u7247", "\u6e32\u67d3\u5e76\u4fdd\u5b58\u957f\u56fe") {
                     onExportImage(includeAttribution)
                 }
-                ExportOption(Icons.Default.PictureAsPdf, "PDF", "通过系统打印对话框导出 PDF") {
+                ExportOption(Icons.Default.PictureAsPdf, "PDF", "\u901a\u8fc7\u7cfb\u7edf\u6253\u5370\u5bf9\u8bdd\u6846\u4fdd\u5b58\u4e3a PDF") {
                     onExportPdf(includeAttribution)
                 }
 
@@ -756,7 +869,7 @@ private fun ExportDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.size(12.dp))
-                        Text("正在导出…", style = MaterialTheme.typography.bodyMedium)
+                        Text("\u6b63\u5728\u5bfc\u51fa\u2026", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
