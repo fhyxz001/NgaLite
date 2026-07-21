@@ -1,6 +1,7 @@
 package com.ngalite.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,12 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,17 +49,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
@@ -68,6 +75,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 sealed interface ListUiState {
@@ -103,6 +112,9 @@ class ListViewModel : ViewModel() {
     private var lastAccessibleForum: Forum? = null
     private var loadJob: kotlinx.coroutines.Job? = null
     private var loadMoreJob: kotlinx.coroutines.Job? = null
+    private val previewSemaphore = Semaphore(4)
+    private val previewJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val previewCache = LinkedHashMap<String, List<String>>()
 
     /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
     private var generation = 0L
@@ -164,6 +176,8 @@ class ListViewModel : ViewModel() {
         topics = emptyList()
         loadJob?.cancel()
         loadMoreJob?.cancel()
+        previewJobs.values.forEach { it.cancel() }
+        previewJobs.clear()
         isLoadingMore = false
         val forum = _currentForum.value
         if (forum.requiresLogin() && !CookieStore.isLogin()) {
@@ -178,7 +192,11 @@ class ListViewModel : ViewModel() {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = 1) }
                 if (myGen != generation) return@launch
                 // 按 tid 去重，避免 NGA 单页返回重复帖子导致 LazyColumn 重复 key 崩溃
-                val newTopics = NgaParser.parseTopicList(html).distinctBy { it.tid }
+                val newTopics = NgaParser.parseTopicList(html)
+                    .distinctBy { it.tid }
+                    .map { topic ->
+                        previewCache[topic.tid]?.let { topic.copy(previewImages = it) } ?: topic
+                    }
                 if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
@@ -210,7 +228,11 @@ class ListViewModel : ViewModel() {
                 if (myGen != generation) return@launch
                 // 过滤掉已存在的 tid（NGA 置顶帖在每页都会重复出现），避免 LazyColumn 重复 key 崩溃
                 val existingTids = snapshot.mapTo(mutableSetOf()) { it.tid }
-                val newTopics = NgaParser.parseTopicList(html).filter { it.tid !in existingTids }
+                val newTopics = NgaParser.parseTopicList(html)
+                    .filter { it.tid !in existingTids }
+                    .map { topic ->
+                        previewCache[topic.tid]?.let { topic.copy(previewImages = it) } ?: topic
+                    }
                 if (myGen != generation) return@launch
                 topics = snapshot + newTopics
                 currentPage = nextPage
@@ -236,6 +258,50 @@ class ListViewModel : ViewModel() {
             }
         }
     }
+
+    /** 帖子列表项可见时，异步加载主帖前 4 张图片作为缩略图预览 */
+    fun requestTopicPreview(tid: String) {
+        if (previewCache.containsKey(tid)) {
+            updateTopicPreview(tid, previewCache.getValue(tid))
+            return
+        }
+        if (previewJobs.containsKey(tid)) return
+
+        val myGeneration = generation
+        previewJobs[tid] = viewModelScope.launch {
+            try {
+                val images = withContext(Dispatchers.IO) {
+                    previewSemaphore.withPermit {
+                        NgaParser.parseMainPostImages(NgaApi.fetchThread(tid))
+                    }
+                }
+                if (myGeneration != generation) return@launch
+                previewCache[tid] = images
+                while (previewCache.size > 200) {
+                    previewCache.remove(previewCache.keys.first())
+                }
+                updateTopicPreview(tid, images)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                // 单个帖子缩略图加载失败不应影响整个帖子列表
+            } finally {
+                if (myGeneration == generation) previewJobs.remove(tid)
+            }
+        }
+    }
+
+    private fun updateTopicPreview(tid: String, images: List<String>) {
+        val index = topics.indexOfFirst { it.tid == tid }
+        if (index < 0 || topics[index].previewImages == images) return
+        topics = topics.toMutableList().also { list ->
+            list[index] = list[index].copy(previewImages = images)
+        }
+        val current = _state.value
+        if (current is ListUiState.Success) {
+            _state.value = current.copy(topics = topics)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -248,6 +314,7 @@ fun ForumThreadsScreen(
 ) {
     val state by vm.state.collectAsState()
     val currentForum by vm.currentForum.collectAsState()
+    var isFavorite by remember(currentForum.fid) { mutableStateOf(FavoriteStore.isFavorite(currentForum.fid)) }
     var showLoginDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
@@ -347,7 +414,10 @@ fun ForumThreadsScreen(
 
             is ListUiState.Success -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color(0xFFF3F3F3)),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -380,11 +450,27 @@ fun ForumThreadsScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                        IconButton(
+                            onClick = {
+                                FavoriteStore.toggle(currentForum.fid)
+                                isFavorite = FavoriteStore.isFavorite(currentForum.fid)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
+                                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
 
                 items(s.topics, key = { it.tid }) { topic ->
-                    TopicItem(topic) { onTopicClick(topic.tid) }
+                    TopicItem(
+                        topic = topic,
+                        onClick = { onTopicClick(topic.tid) },
+                        onPreviewNeeded = { vm.requestTopicPreview(topic.tid) }
+                    )
                 }
 
                 if (s.topics.isEmpty()) {
@@ -472,7 +558,13 @@ fun ForumThreadsScreen(
 }
 
 @Composable
-private fun TopicItem(topic: Topic, onClick: () -> Unit) {
+private fun TopicItem(
+    topic: Topic,
+    onClick: () -> Unit,
+    onPreviewNeeded: () -> Unit
+) {
+    var previewImageUrl by remember(topic.tid) { mutableStateOf<String?>(null) }
+    LaunchedEffect(topic.tid) { onPreviewNeeded() }
     // 缓存热度计算结果，避免滚动时重复计算
     val colorScheme = MaterialTheme.colorScheme
     val (replies, badgeColor, badgeContainer) = remember(topic.replies, colorScheme) {
@@ -493,9 +585,9 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 2.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp)
     ) {
         Column(Modifier.padding(14.dp)) {
             Text(
@@ -507,27 +599,11 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             if (topic.previewImages.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        topic.previewImages,
-                        key = { url -> "${topic.tid}_preview_$url" }
-                    ) { url ->
-                        AsyncImage(
-                            model = url,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(100.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
+                TopicPreviewGrid(
+                    images = topic.previewImages,
+                    onImageClick = { previewImageUrl = it },
+                    modifier = Modifier.padding(top = 10.dp)
+                )
             }
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -537,7 +613,7 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
                 // 回复数徽标
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(badgeContainer)
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
@@ -565,4 +641,82 @@ private fun TopicItem(topic: Topic, onClick: () -> Unit) {
             }
         }
     }
+
+    previewImageUrl?.let { url ->
+        Dialog(
+            onDismissRequest = { previewImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { previewImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "帖子图片预览",
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopicPreviewGrid(
+    images: List<String>,
+    onImageClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val previews = images.take(4)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (previews.size == 1) {
+            TopicPreviewImage(
+                url = previews.first(),
+                onClick = { onImageClick(previews.first()) },
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+            )
+        } else {
+            previews.chunked(2).forEach { rowImages ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    rowImages.forEach { url ->
+                        TopicPreviewImage(
+                            url = url,
+                            onClick = { onImageClick(url) },
+                            modifier = Modifier.weight(1f).aspectRatio(1.35f)
+                        )
+                    }
+                    if (rowImages.size == 1) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopicPreviewImage(
+    url: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AsyncImage(
+        model = url,
+        contentDescription = "主帖图片",
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentScale = ContentScale.Crop
+    )
 }

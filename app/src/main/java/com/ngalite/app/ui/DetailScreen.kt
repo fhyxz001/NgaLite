@@ -88,6 +88,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
+private val PostTextBackground = Color(0xFFF3F3F3)
+
 sealed interface DetailUiState {
     data object Loading : DetailUiState
     data class Success(
@@ -458,7 +460,7 @@ fun DetailScreen(
                         )
                         IconButton(
                             onClick = { showExportDialog = true },
-                            enabled = state is DetailUiState.Success && !isExporting
+                            enabled = !isExporting && !s.isPageLoading
                         ) {
                             Icon(Icons.Default.Share, contentDescription = "分享")
                         }
@@ -474,16 +476,16 @@ fun DetailScreen(
                 if (s.comments.isNotEmpty()) {
                     item {
                         Text(
-                            "全部评论",
+                            text = if (s.currentPage == 1) "全部回复" else "P${s.currentPage} 页回复",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)
+                            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
                         )
                     }
                 }
 
-                itemsIndexed(s.comments, key = { index, post -> "$index-${post.floor}-${post.author}" }) { _, post ->
+                itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}-${post.author}" }) { _, post ->
                     CommentCard(post) { fullScreenImageUrl = it }
                 }
 
@@ -578,9 +580,9 @@ fun DetailScreen(
 private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = PostTextBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             PostContent(post.contentNodes, onImageClick)
@@ -604,10 +606,10 @@ private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .padding(vertical = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = PostTextBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(
@@ -749,7 +751,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { onImageClick(group.url) },
                         contentScale = ContentScale.FillWidth
@@ -761,7 +763,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                             .fillMaxWidth()
                             .height(IntrinsicSize.Max)
                             .padding(top = 12.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Box(
