@@ -1,12 +1,10 @@
-package com.ngalite.app.ui
+﻿package com.ngalite.app.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,105 +14,80 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// 黑白配色方案
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF1A1A1A),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFE6E6E6),
-    onPrimaryContainer = Color(0xFF1A1A1A),
-    secondary = Color(0xFF5A5A5A),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFF0F0F0),
-    onSecondaryContainer = Color(0xFF1A1A1A),
-    tertiary = Color(0xFF737373),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFF0F0F0),
-    onTertiaryContainer = Color(0xFF1A1A1A),
-    error = Color(0xFFBA1A1A),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    background = Color(0xFFFCFCFC),
-    onBackground = Color(0xFF1A1A1A),
-    surface = Color(0xFFFCFCFC),
-    onSurface = Color(0xFF1A1A1A),
-    surfaceVariant = Color(0xFFF0F0F0),
-    onSurfaceVariant = Color(0xFF5A5A5A),
-    outline = Color(0xFFB0B0B0),
-    outlineVariant = Color(0xFFD9D9D9),
-    surfaceTint = Color(0xFF1A1A1A),
-    inverseSurface = Color(0xFF2E2E2E),
-    inverseOnSurface = Color(0xFFF0F0F0),
-    inversePrimary = Color(0xFFCCCCCC),
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFCCCCCC),
-    onPrimary = Color(0xFF1A1A1A),
-    primaryContainer = Color(0xFF3D3D3D),
-    onPrimaryContainer = Color(0xFFE6E6E6),
-    secondary = Color(0xFFB0B0B0),
-    onSecondary = Color(0xFF1A1A1A),
-    secondaryContainer = Color(0xFF3D3D3D),
-    onSecondaryContainer = Color(0xFFE6E6E6),
-    tertiary = Color(0xFF999999),
-    onTertiary = Color(0xFF1A1A1A),
-    tertiaryContainer = Color(0xFF4D4D4D),
-    onTertiaryContainer = Color(0xFFF0F0F0),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
-    background = Color(0xFF121212),
-    onBackground = Color(0xFFE6E6E6),
-    surface = Color(0xFF1A1A1A),
-    onSurface = Color(0xFFE6E6E6),
-    surfaceVariant = Color(0xFF3D3D3D),
-    onSurfaceVariant = Color(0xFFB0B0B0),
-    outline = Color(0xFF666666),
-    outlineVariant = Color(0xFF3D3D3D),
-    surfaceTint = Color(0xFFCCCCCC),
-    inverseSurface = Color(0xFFE6E6E6),
-    inverseOnSurface = Color(0xFF1A1A1A),
-    inversePrimary = Color(0xFF1A1A1A),
+/**
+ * A quiet, monochrome interface built around white surfaces, soft neutral depth and
+ * generously rounded controls. It deliberately avoids brand colour so the content
+ * remains the visual focus.
+ */
+private val WhiteGlassColors = lightColorScheme(
+    primary = Color(0xFF1C1C1E),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE9E9EB),
+    onPrimaryContainer = Color(0xFF1C1C1E),
+    secondary = Color(0xFF636366),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFF2F2F7),
+    onSecondaryContainer = Color(0xFF2C2C2E),
+    tertiary = Color(0xFF48484A),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE5E5EA),
+    onTertiaryContainer = Color(0xFF1C1C1E),
+    error = Color(0xFF3A3A3C),
+    onError = Color.White,
+    errorContainer = Color(0xFFF2F2F7),
+    onErrorContainer = Color(0xFF1C1C1E),
+    background = Color(0xFFF2F2F7),
+    onBackground = Color(0xFF1C1C1E),
+    surface = Color.White,
+    onSurface = Color(0xFF1C1C1E),
+    surfaceVariant = Color(0xFFF7F7F8),
+    onSurfaceVariant = Color(0xFF636366),
+    outline = Color(0xFF8E8E93),
+    outlineVariant = Color(0xFFD1D1D6),
+    surfaceTint = Color.Transparent,
+    inverseSurface = Color(0xFF1C1C1E),
+    inverseOnSurface = Color.White,
+    inversePrimary = Color(0xFFF2F2F7),
 )
 
 private val AppShapes = androidx.compose.material3.Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(12.dp),
+    small = RoundedCornerShape(16.dp),
+    medium = RoundedCornerShape(24.dp),
+    large = RoundedCornerShape(30.dp),
+    extraLarge = RoundedCornerShape(38.dp),
 )
 
 private val AppTypography = Typography(
-    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
-    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp, letterSpacing = 0.15.sp),
-    titleSmall = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp, letterSpacing = 0.1.sp),
-    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.5.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, letterSpacing = 0.25.sp),
-    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.4.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp, letterSpacing = 0.1.sp),
-    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+    headlineLarge = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold, lineHeight = 41.sp, letterSpacing = (-0.8).sp),
+    headlineMedium = TextStyle(fontSize = 29.sp, fontWeight = FontWeight.Bold, lineHeight = 35.sp, letterSpacing = (-0.65).sp),
+    headlineSmall = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp, letterSpacing = (-0.4).sp),
+    titleLarge = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 27.sp, letterSpacing = (-0.25).sp),
+    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 23.sp),
+    titleSmall = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 21.sp),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, letterSpacing = 0.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, letterSpacing = 0.sp),
+    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp, letterSpacing = 0.sp),
+    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, lineHeight = 16.sp, letterSpacing = 0.sp),
+    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 15.sp, letterSpacing = 0.sp),
 )
 
 @Composable
 fun NgaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // NGA Lite intentionally stays in the light, paper-like appearance requested by the design.
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = WhiteGlassColors,
         typography = AppTypography,
         shapes = AppShapes,
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            content()
-        }
+            color = MaterialTheme.colorScheme.background,
+            content = content
+        )
     }
 }

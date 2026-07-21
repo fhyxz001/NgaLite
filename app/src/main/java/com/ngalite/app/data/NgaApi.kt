@@ -62,8 +62,12 @@ object NgaApi {
         fetch("$BASE/thread.php?fid=$fid&page=$page")
 
     /** 拉取帖子详情 HTML */
-    fun fetchThread(tid: String): String =
-        fetch("$BASE/read.php?tid=$tid")
+    /** Fetch a thread page. NGA's first page is the canonical URL without a page parameter. */
+    fun fetchThread(tid: String, page: Int = 1): String {
+        val safePage = page.coerceAtLeast(1)
+        val pageQuery = if (safePage == 1) "" else "&page=$safePage"
+        return fetch("$BASE/read.php?tid=$tid$pageQuery")
+    }
 
     private fun fetch(url: String): String {
         val req = Request.Builder()
