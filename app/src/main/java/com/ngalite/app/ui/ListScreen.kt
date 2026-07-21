@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,7 +76,9 @@ sealed interface ListUiState {
         val topics: List<Topic>,
         val isLoadingMore: Boolean = false,
         val hasMore: Boolean = true,
-        val loadMoreError: String? = null
+        val loadMoreError: String? = null,
+        /** 加载代次：每次 load() 自增，用于区分全新加载与返回页面时的状态恢复 */
+        val generation: Long = 0L
     ) : ListUiState
 
     data class Error(val message: String) : ListUiState
@@ -179,7 +182,7 @@ class ListViewModel : ViewModel() {
                 if (myGen != generation) return@launch
                 topics = newTopics
                 hasMore = newTopics.isNotEmpty()
-                _state.value = ListUiState.Success(topics = topics, hasMore = hasMore)
+                _state.value = ListUiState.Success(topics = topics, hasMore = hasMore, generation = myGen)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 if (myGen != generation) return@launch
@@ -199,7 +202,8 @@ class ListViewModel : ViewModel() {
             _state.value = ListUiState.Success(
                 topics = snapshot,
                 isLoadingMore = true,
-                hasMore = hasMore
+                hasMore = hasMore,
+                generation = myGen
             )
             try {
                 val html = withContext(Dispatchers.IO) { NgaApi.fetchThreadList(fid, page = nextPage) }
@@ -215,7 +219,8 @@ class ListViewModel : ViewModel() {
                 _state.value = ListUiState.Success(
                     topics = topics,
                     isLoadingMore = false,
-                    hasMore = hasMore
+                    hasMore = hasMore,
+                    generation = myGen
                 )
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
@@ -225,7 +230,8 @@ class ListViewModel : ViewModel() {
                     topics = topics,
                     isLoadingMore = false,
                     hasMore = hasMore,
-                    loadMoreError = t.message ?: "加载更多失败"
+                    loadMoreError = t.message ?: "加载更多失败",
+                    generation = myGen
                 )
             }
         }
@@ -250,9 +256,13 @@ fun ForumThreadsScreen(
         vm.loadForum(fid)
     }
 
-    // 切换板块后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 或显示异常
-    LaunchedEffect(currentForum) {
-        if (listState.layoutInfo.totalItemsCount > 0) {
+    // 切换板块/重试等全新加载后滚动到顶部，避免保持旧滚动位置导致立即触发 loadMore 或显示异常；
+    // 从详情页返回时 generation 不变，不重置滚动位置，保留用户浏览进度
+    var scrolledToTopGen by rememberSaveable { mutableStateOf(-1L) }
+    LaunchedEffect(state) {
+        val s = state
+        if (s is ListUiState.Success && s.generation != scrolledToTopGen) {
+            scrolledToTopGen = s.generation
             listState.scrollToItem(0)
         }
     }

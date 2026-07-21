@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -79,11 +80,13 @@ import com.ngalite.app.data.ExportManager
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
+import java.nio.charset.Charset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 
 sealed interface DetailUiState {
     data object Loading : DetailUiState
@@ -91,7 +94,13 @@ sealed interface DetailUiState {
         val title: String,
         val forumName: String,
         val originalPost: Post?,
-        val comments: List<Post>
+        val comments: List<Post>,
+        /** 当前页码（NGA read.php 按 20 条/页分页） */
+        val currentPage: Int = 1,
+        /** 是否可能有下一页：当前页解析满 20 条时为 true，翻页后若内容重复/为空则回退并置 false */
+        val hasMore: Boolean = false,
+        /** 翻页加载中：保留当前页内容，仅分页栏显示加载状态 */
+        val isPageLoading: Boolean = false
     ) : DetailUiState
 
     data class Error(val message: String) : DetailUiState
@@ -122,27 +131,81 @@ class DetailViewModel : ViewModel() {
     private var currentTid: String = ""
     private var currentForumName: String = ""
 
+    /** 当前页码（NGA read.php 按 20 条/页分页） */
+    private var currentPage = 1
+
+    /** 当前页首条帖子的楼层签名，用于识别翻过最后一页时 NGA 返回的重复内容 */
+    private var firstPostSignature = ""
+
     /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
     private var loadGeneration = 0L
 
     fun load(tid: String, forumName: String = "") {
         currentTid = tid
         currentForumName = forumName
+        currentPage = 1
+        firstPostSignature = ""
+        loadPage(1)
+    }
+
+    /** 重试：重新加载当前页（加载失败后停留在原页码） */
+    fun retry() = loadPage(currentPage)
+
+    /** 下一页：仅在智能判断可能有下一页时可触发 */
+    fun loadNextPage() {
+        val s = _state.value as? DetailUiState.Success ?: return
+        if (!s.hasMore || s.isPageLoading) return
+        loadPage(currentPage + 1)
+    }
+
+    /** 上一页 */
+    fun loadPrevPage() {
+        val s = _state.value as? DetailUiState.Success ?: return
+        if (currentPage <= 1 || s.isPageLoading) return
+        loadPage(currentPage - 1)
+    }
+
+    private fun loadPage(page: Int) {
         val myGen = ++loadGeneration
+        val prevSuccess = _state.value as? DetailUiState.Success
+        val prevSignature = firstPostSignature
+        val prevPage = currentPage
+        currentPage = page
         viewModelScope.launch {
-            _state.value = DetailUiState.Loading
+            // 翻页时保留已有内容、仅分页栏显示加载中；首载/无内容时才显示全屏 Loading
+            _state.value = prevSuccess?.copy(isPageLoading = true) ?: DetailUiState.Loading
             try {
-                val html = withContext(Dispatchers.IO) { NgaApi.fetchThread(tid) }
+                val html = withContext(Dispatchers.IO) { fetchThreadPage(currentTid, page) }
                 if (myGen != loadGeneration) return@launch
                 val result = withContext(Dispatchers.Default) { NgaParser.parseDetail(html) }
                 if (myGen != loadGeneration) return@launch
+
+                // 智能分页判断：翻过最后一页时 NGA 会返回空内容或重复上一页的内容，
+                // 此时回退到上一页并标记没有下一页，避免"下一页"被无限点击
+                if (page > prevPage && prevSuccess != null &&
+                    (result.posts.isEmpty() || signatureOf(result.posts) == prevSignature)
+                ) {
+                    currentPage = prevPage
+                    _state.value = prevSuccess.copy(hasMore = false, isPageLoading = false)
+                    return@launch
+                }
+
                 if (result.posts.isEmpty()) {
                     _state.value = DetailUiState.Error("未能解析帖子内容，请稍后重试")
                     return@launch
                 }
-                val originalPost = result.posts.firstOrNull()
-                val comments = if (result.posts.isNotEmpty()) result.posts.drop(1) else emptyList()
-                _state.value = DetailUiState.Success(result.title, forumName, originalPost, comments)
+
+                firstPostSignature = signatureOf(result.posts)
+                val originalPost = if (page == 1) result.posts.firstOrNull() else null
+                val comments = if (page == 1) result.posts.drop(1) else result.posts
+                _state.value = DetailUiState.Success(
+                    result.title,
+                    currentForumName,
+                    originalPost,
+                    comments,
+                    currentPage = page,
+                    hasMore = result.posts.size >= PAGE_SIZE
+                )
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (t: Throwable) {
@@ -150,6 +213,17 @@ class DetailViewModel : ViewModel() {
                 _state.value = DetailUiState.Error(t.message ?: "未知错误")
             }
         }
+    }
+
+    /** 首条帖子的楼层签名（楼层+作者+时间），用于跨页识别重复内容 */
+    private fun signatureOf(posts: List<Post>): String {
+        val p = posts.firstOrNull() ?: return ""
+        return "${p.floor}|${p.author}|${p.date}"
+    }
+
+    companion object {
+        /** NGA read.php 每页固定条数，用于智能判断是否还有下一页 */
+        private const val PAGE_SIZE = 20
     }
 
     private fun postUrl(): String =
@@ -250,6 +324,30 @@ class DetailViewModel : ViewModel() {
     }
 }
 
+/** 详情页分页专用 client：复用 [NgaApi] 的共享连接池与超时配置 */
+private val detailPageClient by lazy { NgaApi.sharedClientBuilder().build() }
+
+/**
+ * 抓取帖子指定页的 HTML（NGA read.php 按 20 条/页分页）。
+ *
+ * 第 1 页复用 [NgaApi.fetchThread]，保持原有 CookieJar 行为不变；
+ * 第 2 页及以后手动携带 [CookieStore] 中的登录 Cookie。
+ */
+private fun fetchThreadPage(tid: String, page: Int): String {
+    if (page <= 1) return NgaApi.fetchThread(tid)
+    val builder = Request.Builder()
+        .url("https://bbs.nga.cn/read.php?tid=$tid&page=$page")
+        .header("User-Agent", NgaApi.UA)
+        .header("Accept-Charset", "GBK")
+    val cookie = CookieStore.get()
+    if (cookie.isNotBlank()) builder.header("Cookie", cookie)
+    detailPageClient.newCall(builder.build()).execute().use { resp ->
+        if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
+        val bytes = resp.body?.bytes() ?: return ""
+        return String(bytes, Charset.forName("GBK"))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
@@ -260,6 +358,12 @@ fun DetailScreen(
 ) {
     LaunchedEffect(tid, forumName) { vm.load(tid, forumName) }
     val state by vm.state.collectAsState()
+    val listState = rememberLazyListState()
+    // 翻页成功后滚动到顶部，从新楼层的第一条开始阅读
+    val loadedPage = (state as? DetailUiState.Success)?.currentPage ?: 0
+    LaunchedEffect(loadedPage) {
+        listState.scrollToItem(0)
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
@@ -316,7 +420,7 @@ fun DetailScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(Modifier.height(12.dp))
-                TextButton(onClick = { vm.load(tid, forumName) }) {
+                TextButton(onClick = { vm.retry() }) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
                     Text("重试")
@@ -324,7 +428,8 @@ fun DetailScreen(
             }
 
             is DetailUiState.Success -> LazyColumn(
-                Modifier
+                state = listState,
+                modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topSpacing + 12.dp, bottom = 12.dp)
@@ -380,6 +485,20 @@ fun DetailScreen(
 
                 itemsIndexed(s.comments, key = { index, post -> "$index-${post.floor}-${post.author}" }) { _, post ->
                     CommentCard(post) { fullScreenImageUrl = it }
+                }
+
+                // 底部分页栏：有评论或已翻到第 2 页及以后时显示
+                if (s.comments.isNotEmpty() || s.currentPage > 1) {
+                    item {
+                        DetailPager(
+                            currentPage = s.currentPage,
+                            hasPrev = s.currentPage > 1,
+                            hasNext = s.hasMore,
+                            isLoading = s.isPageLoading,
+                            onPrev = vm::loadPrevPage,
+                            onNext = vm::loadNextPage
+                        )
+                    }
                 }
             }
         }
@@ -535,6 +654,61 @@ private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
                     )
                 }
             }
+        }
+    }
+}
+
+/** 详情页底部分页栏：按 20 条/页智能判断，最后一页不再显示"下一页" */
+@Composable
+private fun DetailPager(
+    currentPage: Int,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    isLoading: Boolean,
+    onPrev: () -> Unit,
+    onNext: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        TextButton(onClick = onPrev, enabled = hasPrev && !isLoading) {
+            Text("上一页")
+        }
+        Spacer(Modifier.width(8.dp))
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "加载中…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Text(
+                "第 $currentPage 页",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        if (hasNext) {
+            TextButton(onClick = onNext, enabled = !isLoading) {
+                Text("下一页")
+            }
+        } else {
+            Text(
+                "没有更多了",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
         }
     }
 }
@@ -704,4 +878,109 @@ private fun InlineRichText(nodes: List<ContentNode>) {
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.outline
                             )
-         
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportDialog(
+    onDismiss: () -> Unit,
+    isExporting: Boolean,
+    onExportMarkdown: (includeAttribution: Boolean) -> Unit,
+    onExportHtml: (includeAttribution: Boolean) -> Unit,
+    onExportImage: (includeAttribution: Boolean) -> Unit,
+    onExportPdf: (includeAttribution: Boolean) -> Unit,
+) {
+    var includeAttribution by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("导出 / 分享") },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                Text(
+                    "选择导出格式，导出内容已适配手机屏幕展示",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                ExportOption(Icons.Default.Code, "Markdown", "复制为 Markdown 文本") {
+                    onExportMarkdown(includeAttribution)
+                }
+                ExportOption(Icons.Default.Html, "HTML", "保存为 HTML 文件到下载目录") {
+                    onExportHtml(includeAttribution)
+                }
+                ExportOption(Icons.Default.Image, "图片", "渲染为长图并保存到相册") {
+                    onExportImage(includeAttribution)
+                }
+                ExportOption(Icons.Default.PictureAsPdf, "PDF", "通过系统打印对话框导出 PDF") {
+                    onExportPdf(includeAttribution)
+                }
+
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "包含 NgaLite 署名",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = includeAttribution,
+                        onCheckedChange = { includeAttribution = it },
+                        enabled = !isExporting,
+                    )
+                }
+
+                if (isExporting) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.size(12.dp))
+                        Text("正在导出…", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isExporting) { Text("关闭") }
+        },
+    )
+}
+
+@Composable
+private fun ExportOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.size(12.dp))
+        androidx.compose.foundation.layout.Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
