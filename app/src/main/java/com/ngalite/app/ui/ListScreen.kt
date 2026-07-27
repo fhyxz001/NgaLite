@@ -563,7 +563,7 @@ private fun TopicItem(
     onClick: () -> Unit,
     onPreviewNeeded: () -> Unit
 ) {
-    var previewImageUrl by remember(topic.tid) { mutableStateOf<String?>(null) }
+    var previewImageIndex by remember(topic.tid) { mutableStateOf(-1) }
     LaunchedEffect(topic.tid) { onPreviewNeeded() }
     // 缓存热度计算结果，避免滚动时重复计算
     val colorScheme = MaterialTheme.colorScheme
@@ -601,7 +601,7 @@ private fun TopicItem(
             if (topic.previewImages.isNotEmpty()) {
                 TopicPreviewGrid(
                     images = topic.previewImages,
-                    onImageClick = { previewImageUrl = it },
+                    onImageClick = { previewImageIndex = it },
                     modifier = Modifier.padding(top = 10.dp)
                 )
             }
@@ -642,33 +642,19 @@ private fun TopicItem(
         }
     }
 
-    previewImageUrl?.let { url ->
-        Dialog(
-            onDismissRequest = { previewImageUrl = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .clickable { previewImageUrl = null },
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = "帖子图片预览",
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
+    if (previewImageIndex >= 0 && topic.previewImages.isNotEmpty()) {
+        FullScreenImageViewer(
+            images = topic.previewImages,
+            initialIndex = previewImageIndex,
+            onDismiss = { previewImageIndex = -1 }
+        )
     }
 }
 
 @Composable
 private fun TopicPreviewGrid(
     images: List<String>,
-    onImageClick: (String) -> Unit,
+    onImageClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val previews = images.take(4)
@@ -679,19 +665,19 @@ private fun TopicPreviewGrid(
         if (previews.size == 1) {
             TopicPreviewImage(
                 url = previews.first(),
-                onClick = { onImageClick(previews.first()) },
+                onClick = { onImageClick(0) },
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
             )
         } else {
-            previews.chunked(2).forEach { rowImages ->
+            previews.chunked(2).forEachIndexed { chunkIndex, rowImages ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    rowImages.forEach { url ->
+                    rowImages.forEachIndexed { localIndex, url ->
                         TopicPreviewImage(
                             url = url,
-                            onClick = { onImageClick(url) },
+                            onClick = { onImageClick(chunkIndex * 2 + localIndex) },
                             modifier = Modifier.weight(1f).aspectRatio(1.35f)
                         )
                     }

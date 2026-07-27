@@ -369,7 +369,7 @@ fun DetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
-    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var fullScreenState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -469,7 +469,7 @@ fun DetailScreen(
 
                 s.originalPost?.let { post ->
                     item {
-                        OriginalPostCard(post) { fullScreenImageUrl = it }
+                        OriginalPostCard(post) { images, index -> fullScreenState = images to index }
                     }
                 }
 
@@ -486,7 +486,7 @@ fun DetailScreen(
                 }
 
                 itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}-${post.author}" }) { _, post ->
-                    CommentCard(post) { fullScreenImageUrl = it }
+                    CommentCard(post) { images, index -> fullScreenState = images to index }
                 }
 
                 // 底部分页栏：有评论或已翻到第 2 页及以后时显示
@@ -553,31 +553,17 @@ fun DetailScreen(
     }
 
     // 全屏图片查看
-    fullScreenImageUrl?.let { url ->
-        Dialog(
-            onDismissRequest = { fullScreenImageUrl = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.9f))
-                    .clickable { fullScreenImageUrl = null },
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = "放大图片",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
+    fullScreenState?.let { (images, index) ->
+        FullScreenImageViewer(
+            images = images,
+            initialIndex = index,
+            onDismiss = { fullScreenState = null }
+        )
     }
 }
 
 @Composable
-private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
+private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -602,7 +588,7 @@ private fun OriginalPostCard(post: Post, onImageClick: (String) -> Unit) {
 }
 
 @Composable
-private fun CommentCard(post: Post, onImageClick: (String) -> Unit) {
+private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -719,7 +705,7 @@ private fun DetailPager(
  * 渲染正文内容节点：连续的文本与表情合并为内联富文本，图片/引用单独成块。
  */
 @Composable
-private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit) {
+private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, Int) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     val screenDensity = density.density
@@ -728,9 +714,15 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
         (screenWidthDp * screenDensity).toInt()
     }
 
+    // 收集当前帖子所有图片 URL，用于全屏查看时左右滑动切换
+    val allImages = remember(nodes) {
+        nodes.filterIsInstance<ContentNode.Image>().map { it.url }
+    }
+
     // 缓存节点分组结果，避免每次重组都重新遍历
     val groupedNodes = remember(nodes) { groupContentNodes(nodes) }
 
+    var imgIdx = 0
     groupedNodes.forEachIndexed { index, group ->
         // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
         key(index, group::class) {
@@ -739,6 +731,8 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                     InlineRichText(group.nodes)
                 }
                 is NodeGroup.Image -> {
+                    val currentImageIndex = imgIdx
+                    imgIdx++
                     val request = remember(group.url, screenWidthPx) {
                         ImageRequest.Builder(context)
                             .data(group.url)
@@ -753,7 +747,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (String) -> Unit
                             .padding(top = 10.dp)
                             .clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onImageClick(group.url) },
+                            .clickable { onImageClick(allImages, currentImageIndex) },
                         contentScale = ContentScale.FillWidth
                     )
                 }
