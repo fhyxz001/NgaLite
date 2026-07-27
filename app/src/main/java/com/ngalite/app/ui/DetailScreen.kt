@@ -480,7 +480,7 @@ fun DetailScreen(
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+                            modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
                         )
                     }
                 }
