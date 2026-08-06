@@ -779,7 +779,7 @@ private fun TopicItem(
     }
 }
 
-/** 瀑布流帖子项：图片 + 底部不透明毛玻璃标题叠加 */
+/** 瀑布流帖子项：有图片时展示图片+毛玻璃标题，无图片时展示放大文字卡片 */
 @Composable
 private fun WaterfallTopicItem(
     topic: Topic,
@@ -810,57 +810,99 @@ private fun WaterfallTopicItem(
                 .fillMaxWidth()
                 .aspectRatio(aspectRatio)
         ) {
-            // 主图或占位符
             if (imageUrl != null) {
+                // 有图片：展示图片 + 底部毛玻璃标题
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = topic.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-            } else {
+
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(56.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.72f))
+                    )
                     Text(
-                        topic.title.firstOrNull()?.toString() ?: "?",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.outline
+                        topic.title,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .wrapContentHeight(Alignment.CenterVertically)
+                            .padding(horizontal = 10.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+            } else {
+                // 无图片：展示放大的文字卡片
+                WaterfallTextCard(topic)
             }
+        }
+    }
+}
 
-            // 底部不透明毛玻璃标题叠加层
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                // 深色半透明遮罩，营造不透明玻璃质感
-                // 不再重复加载同一图片做模糊层，改为纯色遮罩降低性能开销
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.72f))
-                )
-                // 标题文字
+/** 瀑布流无图帖子：放大的标题文字 + 回复数 + 时间 */
+@Composable
+private fun WaterfallTextCard(topic: Topic) {
+    // 基于 tid 哈希选取柔和背景色，增加视觉多样性
+    val bgColor = remember(topic.tid) {
+        val colors = listOf(
+            Color(0xFFF5F0FF), Color(0xFFF0F7FF), Color(0xFFFFF5F0),
+            Color(0xFFF0FFF5), Color(0xFFFFF0F5), Color(0xFFF0F0FF),
+        )
+        val hash = kotlin.math.abs(topic.tid.hashCode())
+        colors[hash % colors.size]
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // 标题文字放大展示
+        Text(
+            topic.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 6,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // 底部信息：回复数 + 时间
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val replies = topic.replies.toIntOrNull() ?: 0
+            if (replies > 0) {
                 Text(
-                    topic.title,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .padding(horizontal = 10.dp),
+                    "$replies 回复",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.outline
                 )
+            } else {
+                Spacer(Modifier.width(0.dp))
             }
+            Text(
+                topic.replyTime,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 1
+            )
         }
     }
 }

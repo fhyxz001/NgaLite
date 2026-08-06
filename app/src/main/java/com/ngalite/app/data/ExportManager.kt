@@ -67,14 +67,21 @@ object ExportManager {
     }
 
     private fun renderTemplate(template: String, content: ExportContent, includeAttribution: Boolean): String {
-        val postsHtml = content.posts.joinToString("\n") { buildPostHtml(it) }
+        // 区分主楼和回复：主楼完整渲染，回复合并为紧凑格式
+        val mainPost = content.posts.firstOrNull()
+        val replies = content.posts.drop(1)
+
+        val mainPostHtml = if (mainPost != null) buildMainPostHtml(mainPost) else ""
+        val repliesHtml = if (replies.isNotEmpty()) buildRepliesHtml(replies) else ""
+
         val exportedDate = "导出日期：" +
             SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val attributionClass = if (includeAttribution) "export-credit" else "export-credit is-hidden"
         val qrCodeHtml = buildQrCodeHtml(content.url)
         return template
             .replace("{{title}}", escapeHtml(content.title))
-            .replace("{{postsHtml}}", postsHtml)
+            .replace("{{mainPostHtml}}", mainPostHtml)
+            .replace("{{repliesHtml}}", repliesHtml)
             .replace("{{exportedDate}}", escapeHtml(exportedDate))
             .replace("{{appAttributionClass}}", attributionClass)
             .replace("{{qrCodeHtml}}", qrCodeHtml)
@@ -118,13 +125,14 @@ object ExportManager {
         return "data:image/png;base64,$base64"
     }
 
-    private fun buildPostHtml(post: Post): String {
+    /** 主楼完整渲染：保留富文本、图片、引用等全部内容 */
+    private fun buildMainPostHtml(post: Post): String {
         val contentHtml = post.contentNodes.joinToString("") { nodeToHtml(it) }
         val likesHtml = if (post.likes != "0") {
             """<span class="post-likes">赞 ${escapeHtml(post.likes)}</span>"""
         } else ""
         return """
-        |<div class="post">
+        |<div class="post-main">
         |    <div class="post-head">
         |        <div class="post-head-left">
         |            <span class="post-author">${escapeHtml(post.author)}</span>
@@ -134,6 +142,29 @@ object ExportManager {
         |        $likesHtml
         |    </div>
         |    <div class="post-content">$contentHtml</div>
+        |</div>
+        """.trimMargin()
+    }
+
+    /** 回复合并渲染：每条回复压缩为一行 "X楼：内容"，仅保留纯文字 */
+    private fun buildRepliesHtml(replies: List<Post>): String {
+        val lines = replies.joinToString("\n") { post ->
+            val textContent = post.contentNodes.mapNotNull { node ->
+                when (node) {
+                    is ContentNode.Text -> node.text.trim().takeIf { it.isNotBlank() }
+                    is ContentNode.Quote -> "「${node.content.trim()}」"
+                    is ContentNode.Image -> "[图片]"
+                    is ContentNode.Emoji -> "[表情]"
+                }
+            }.joinToString("")
+
+            val floorNum = post.floor.filter { it.isDigit() }.ifBlank { post.floor }
+            """<div class="reply-line"><span class="reply-floor">${escapeHtml(floorNum)}楼：</span>${escapeHtml(textContent)}</div>"""
+        }
+        return """
+        |<div class="replies-section">
+        |    <div class="replies-title">回复（${replies.size}条）</div>
+        |    $lines
         |</div>
         """.trimMargin()
     }
@@ -161,34 +192,60 @@ object ExportManager {
         val sb = StringBuilder()
         sb.append("# ").append(content.title).append("\n\n")
         sb.append("---\n\n")
-        content.posts.forEach { post ->
-            val likesStr = if (post.likes != "0") " 赞 ${post.likes} " else " "
-            sb.append("### ").append(post.floor).append(" ")
-                .append(post.author).append("（").append(post.date).append(likesStr).append("）\n\n")
-            post.contentNodes.forEach { node ->
-                when (node) {
-                    is ContentNode.Text -> {
-                        if (node.text.isNotBlank()) {
-                            sb.append(node.text.trim()).append("\n\n")
-                        }
-                    }
-                    is ContentNode.Image -> {
-                        sb.append("![图片](").append(node.url).append(")\n\n")
-                    }
-                    is ContentNode.Quote -> {
-                        node.content.lines().forEach { line ->
-                            sb.append("> ").append(line).append("\n")
-                        }
-                        sb.append("\n")
-                    }
-                    is ContentNode.Emoji -> {
-                        sb.append("[s:").append(node.folder).append(":").append(node.name).append("]")
-                    }
-                }
+
+        val mainPost = content.posts.firstOrNull()
+        val replies = content.posts.drop(1)
+
+        // 主楼完整输出
+        if (mainPost != null) {
+            val likesStr = if (mainPost.likes != "0") " 赞 ${mainPost.likes} " else " "
+            sb.append("### ").append(mainPost.floor).append(" ")
+                .append(mainPost.author).append("（").append(mainPost.date).append(likesStr).append("）\n\n")
+            mainPost.contentNodes.forEach { node ->
+                appendNodeToMarkdown(sb, node)
             }
             sb.append("---\n\n")
         }
+
+        // 回复合并输出
+        if (replies.isNotEmpty()) {
+            sb.append("### 回复\n\n")
+            replies.forEach { post ->
+                val textContent = post.contentNodes.mapNotNull { node ->
+                    when (node) {
+                        is ContentNode.Text -> node.text.trim().takeIf { it.isNotBlank() }
+                        is ContentNode.Quote -> "「${node.content.trim()}」"
+                        is ContentNode.Image -> "[图片]"
+                        is ContentNode.Emoji -> "[表情]"
+                    }
+                }.joinToString("")
+                val floorNum = post.floor.filter { it.isDigit() }.ifBlank { post.floor }
+                sb.append("- ").append(floorNum).append("楼：").append(textContent).append("\n")
+            }
+        }
         return sb.toString().trimEnd()
+    }
+
+    private fun appendNodeToMarkdown(sb: StringBuilder, node: ContentNode) {
+        when (node) {
+            is ContentNode.Text -> {
+                if (node.text.isNotBlank()) {
+                    sb.append(node.text.trim()).append("\n\n")
+                }
+            }
+            is ContentNode.Image -> {
+                sb.append("![图片](").append(node.url).append(")\n\n")
+            }
+            is ContentNode.Quote -> {
+                node.content.lines().forEach { line ->
+                    sb.append("> ").append(line).append("\n")
+                }
+                sb.append("\n")
+            }
+            is ContentNode.Emoji -> {
+                sb.append("[s:").append(node.folder).append(":").append(node.name).append("]")
+            }
+        }
     }
 
     // ---- 工具方法 ----
@@ -354,7 +411,7 @@ object ExportManager {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 settings.useWideViewPort = true
-                setBackgroundColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#FFF8E7"))
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
             }
@@ -385,7 +442,7 @@ object ExportManager {
                 val bitmapHeight = (safeHeight * scale).roundToInt().coerceAtLeast(1)
                 val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE)
+                canvas.drawColor(Color.parseColor("#FFF8E7"))
                 canvas.scale(
                     bitmapWidth.toFloat() / viewportWidth.toFloat(),
                     bitmapHeight.toFloat() / safeHeight.toFloat(),

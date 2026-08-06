@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -33,6 +34,11 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Html
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.filled.NavigateBefore
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,8 +70,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,14 +85,13 @@ import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
 import java.nio.charset.Charset
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-
-private val PostTextBackground = Color(0xFFF3F3F3)
 
 /** 楼层徽标颜色组：5 种柔和色调循环使用，相邻楼层颜色不同 */
 private val floorBadgeColors = listOf(
@@ -99,11 +102,33 @@ private val floorBadgeColors = listOf(
     Color(0xFFE0F7FA) to Color(0xFF00695C)  // 青
 )
 
+/** 头像背景颜色组：8 种柔和色调，根据用户名哈希选取 */
+private val avatarColors = listOf(
+    Color(0xFFE3F2FD) to Color(0xFF1565C0),
+    Color(0xFFE8F5E9) to Color(0xFF2E7D32),
+    Color(0xFFFFF3E0) to Color(0xFFE65100),
+    Color(0xFFF3E5F5) to Color(0xFF6A1B9A),
+    Color(0xFFE0F7FA) to Color(0xFF00695C),
+    Color(0xFFFCE4EC) to Color(0xFFAD1457),
+    Color(0xFFE8EAF6) to Color(0xFF283593),
+    Color(0xFFFFF8E1) to Color(0xFFF57F17),
+)
+
+/** 楼主徽标配色 */
+private val TopicOwnerBg = Color(0xFFE3F2FD)
+private val TopicOwnerText = Color(0xFF1565C0)
+
 /** 从楼层文本（如 "3楼"）提取数字，映射到颜色组索引 */
 private fun floorColorPair(floor: String): Pair<Color, Color> {
     val num = floor.filter { it.isDigit() }.toIntOrNull() ?: 0
     val index = if (num > 0) (num - 1) % floorBadgeColors.size else 0
     return floorBadgeColors[index]
+}
+
+/** 根据用户名哈希选取头像配色 */
+private fun avatarColorPair(name: String): Pair<Color, Color> {
+    val hash = abs(name.hashCode())
+    return avatarColors[hash % avatarColors.size]
 }
 
 sealed interface DetailUiState {
@@ -254,8 +279,7 @@ class DetailViewModel : ViewModel() {
     private fun exportContent(): ExportManager.ExportContent? =
         (state.value as? DetailUiState.Success)?.let { success ->
             val allPosts = listOfNotNull(success.originalPost) + success.comments
-            val sorted = allPosts.sortedByDescending { p -> p.likes.toIntOrNull() ?: 0 }.take(10)
-            ExportManager.ExportContent(success.title, sorted, postUrl())
+            ExportManager.ExportContent(success.title, allPosts, postUrl())
         }
 
     /** 复制 Markdown 到剪贴板 */
@@ -335,7 +359,9 @@ class DetailViewModel : ViewModel() {
                 val html = ExportManager.buildExportHtml(context, content, includeAttribution)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val jobName = ExportManager.buildFileName(content.title, "pdf")
-                withContext(Dispatchers.Main) {
+                withContext(
+                    Dispatchers.Main
+                ) {
                     ExportManager.printPdf(context, jobName, inlined)
                 }
             } catch (e: Exception) {
@@ -381,7 +407,6 @@ fun DetailScreen(
     LaunchedEffect(tid, forumName) { vm.load(tid, forumName) }
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
-    // 翻页成功后滚动到顶部，从新楼层的第一条开始阅读
     val loadedPage = (state as? DetailUiState.Success)?.currentPage ?: 0
     LaunchedEffect(loadedPage) {
         listState.scrollToItem(0)
@@ -414,34 +439,56 @@ fun DetailScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
-        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp
+        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp
         when (val s = state) {
-            is DetailUiState.Loading -> Box(
+            is DetailUiState.Loading -> Column(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+                    .background(MaterialTheme.colorScheme.background),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "加载中…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             is DetailUiState.Error -> Column(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.surface),
+                    .background(MaterialTheme.colorScheme.background),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    s.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
+                    "加载失败",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    s.message,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
                 TextButton(onClick = { vm.retry() }) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
@@ -453,63 +500,49 @@ fun DetailScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topSpacing + 12.dp, bottom = 12.dp)
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = topSpacing, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 标题栏 + 统计信息
                 item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回"
-                            )
-                        }
-                        Text(
-                            s.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        IconButton(
-                            onClick = { showExportDialog = true },
-                            enabled = !isExporting && !s.isPageLoading
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = "分享")
-                        }
-                    }
+                    DetailHeader(
+                        title = s.title,
+                        originalPost = s.originalPost,
+                        comments = s.comments,
+                        currentPage = s.currentPage,
+                        onBack = onBack,
+                        onShare = { showExportDialog = true }
+                    )
                 }
 
+                // 主楼
                 s.originalPost?.let { post ->
                     item {
                         OriginalPostCard(post) { images, index -> fullScreenState = images to index }
                     }
                 }
 
+                // 回复区标题
                 if (s.comments.isNotEmpty()) {
                     item {
                         Text(
-                            text = if (s.currentPage == 1) "全部回复" else "P${s.currentPage} 页回复",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            text = if (s.currentPage == 1) "全部回复" else "第 ${s.currentPage} 页",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 0.dp)
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 0.dp)
                         )
                     }
                 }
 
+                // 回复列表
                 itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}-${post.author}" }) { _, post ->
                     CommentCard(post) { images, index -> fullScreenState = images to index }
                 }
 
-                // 底部分页栏：有评论或已翻到第 2 页及以后时显示
+                // 分页栏
                 if (s.comments.isNotEmpty() || s.currentPage > 1) {
                     item {
                         DetailPager(
@@ -522,15 +555,21 @@ fun DetailScreen(
                         )
                     }
                 }
+
+                // 底部结束标记
+                if (!s.hasMore && s.comments.isNotEmpty() && !s.isPageLoading) {
+                    item { EndMarker() }
+                }
             }
         }
 
+        // Loading / Error 状态下的返回按钮
         if (state !is DetailUiState.Success) {
             IconButton(
                 onClick = onBack,
                 modifier = Modifier
                     .padding(padding)
-                    .padding(top = topSpacing, start = 8.dp)
+                    .padding(top = topSpacing, start = 4.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
@@ -582,100 +621,314 @@ fun DetailScreen(
     }
 }
 
+/**
+ * 标题栏：返回按钮 + 标题 + 统计信息 + 分享按钮
+ */
+@Composable
+private fun DetailHeader(
+    title: String,
+    originalPost: Post?,
+    comments: List<Post>,
+    currentPage: Int,
+    onBack: () -> Unit,
+    onShare: () -> Unit
+) {
+    val totalPosts = (if (originalPost != null) 1 else 0) + comments.size
+    val totalLikes = (originalPost?.likes?.toIntOrNull() ?: 0) + comments.sumOf { it.likes.toIntOrNull() ?: 0 }
+    val views = originalPost?.views?.toIntOrNull() ?: 0
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp)
+    ) {
+        // 顶栏：返回 + 分享
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = "分享",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // 标题
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // 统计信息
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                "$totalPosts 帖",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "·",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            Text(
+                "${comments.size} 回复",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "·",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            Text(
+                "$totalLikes 赞",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (views > 0) {
+                Text(
+                    "·",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                Text(
+                    "$views 浏览",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 主楼卡片：用户名 + 楼主标签 + 正文 + 底部互动栏
+ */
 @Composable
 private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = PostTextBackground),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            PostContent(post.contentNodes, onImageClick)
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            Text(
-                "${post.date} · 楼主${if (post.views != "0") " · ${post.views} 浏览" else ""}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = PostTextBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(Modifier.padding(16.dp)) {
+            // 用户信息行
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val (badgeBg, badgeText) = remember(post.floor) { floorColorPair(post.floor) }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(badgeBg)
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        post.floor,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeText
-                    )
-                }
-                Text(
-                    post.author,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            PostContent(post.contentNodes, onImageClick)
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        post.author,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        post.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // 楼主标签
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(TopicOwnerBg)
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        "楼主",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TopicOwnerText
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // 正文
+            PostContent(post.contentNodes, onImageClick)
+
+            // 底部互动栏
+            PostFooter(likes = post.likes, views = post.views)
+        }
+    }
+}
+
+/**
+ * 回复卡片：头像 + 用户名 + 楼层标签 + 正文 + 底部互动栏
+ */
+@Composable
+private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            // 用户信息行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Avatar(post.author, size = 36.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            post.author,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        // 楼层标签
+                        val (badgeBg, badgeText) = remember(post.floor) { floorColorPair(post.floor) }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(badgeBg)
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                post.floor,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeText
+                            )
+                        }
+                    }
+                    Text(
+                        post.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 正文
+            PostContent(post.contentNodes, onImageClick)
+
+            // 底部互动栏
+            PostFooter(likes = post.likes, views = post.views)
+        }
+    }
+}
+
+/**
+ * 圆形头像：用户名首字 + 柔和背景色
+ */
+@Composable
+private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
+    val (bgColor, textColor) = remember(name) { avatarColorPair(name) }
+    val initial = remember(name) {
+        name.firstOrNull { it.isLetterOrDigit() }?.toString() ?: "?"
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(bgColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = initial,
+            style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
+    }
+}
+
+/**
+ * 底部互动栏：点赞数 + 浏览数
+ */
+@Composable
+private fun PostFooter(likes: String, views: String) {
+    val likeCount = likes.toIntOrNull() ?: 0
+    val viewCount = views.toIntOrNull() ?: 0
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // 点赞
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (likeCount > 0) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = "赞",
+                modifier = Modifier.size(14.dp),
+                tint = if (likeCount > 0) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "$likeCount",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (likeCount > 0) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // 浏览
+        if (viewCount > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Visibility,
+                    contentDescription = "浏览",
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                Spacer(Modifier.width(4.dp))
                 Text(
-                    "${post.date}${if (post.views != "0") " · ${post.views} 浏览" else ""}",
+                    "$viewCount",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (post.likes != "0") {
-                    Text(
-                        "赞 ${post.likes}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                }
             }
         }
     }
 }
 
-/** 详情页底部分页栏：按 20 条/页智能判断，最后一页不再显示"下一页" */
+/**
+ * 底部分页栏：上一页 / 页码 / 下一页
+ */
 @Composable
 private fun DetailPager(
     currentPage: Int,
@@ -688,14 +941,30 @@ private fun DetailPager(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        TextButton(onClick = onPrev, enabled = hasPrev && !isLoading) {
-            Text("上一页")
+        // 上一页
+        IconButton(
+            onClick = onPrev,
+            enabled = hasPrev && !isLoading,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.NavigateBefore,
+                contentDescription = "上一页",
+                modifier = Modifier.size(22.dp),
+                tint = if (hasPrev && !isLoading)
+                    MaterialTheme.colorScheme.onSurface
+                else
+                    MaterialTheme.colorScheme.outlineVariant
+            )
         }
-        Spacer(Modifier.width(8.dp))
+
+        Spacer(Modifier.width(16.dp))
+
+        // 页码 / 加载状态
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(16.dp),
@@ -710,23 +979,61 @@ private fun DetailPager(
             )
         } else {
             Text(
-                "第 $currentPage 页",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "$currentPage",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
-        Spacer(Modifier.width(8.dp))
-        if (hasNext) {
-            TextButton(onClick = onNext, enabled = !isLoading) {
-                Text("下一页")
-            }
-        } else {
-            Text(
-                "没有更多了",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline
+
+        Spacer(Modifier.width(16.dp))
+
+        // 下一页
+        IconButton(
+            onClick = onNext,
+            enabled = hasNext && !isLoading,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.NavigateNext,
+                contentDescription = "下一页",
+                modifier = Modifier.size(22.dp),
+                tint = if (hasNext && !isLoading)
+                    MaterialTheme.colorScheme.onSurface
+                else
+                    MaterialTheme.colorScheme.outlineVariant
             )
         }
+    }
+}
+
+/**
+ * 底部结束标记
+ */
+@Composable
+private fun EndMarker() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.width(40.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "没有更多了",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Spacer(Modifier.width(12.dp))
+        HorizontalDivider(
+            modifier = Modifier.width(40.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
 }
 
@@ -774,7 +1081,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, I
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp)
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { onImageClick(allImages, currentImageIndex) },
                         contentScale = ContentScale.FillWidth
@@ -785,8 +1092,8 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, I
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(IntrinsicSize.Max)
-                            .padding(top = 12.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .padding(top = 10.dp, bottom = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Box(
@@ -807,7 +1114,7 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, I
                                 group.content,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp)
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
                     }
@@ -870,7 +1177,7 @@ private fun InlineRichText(nodes: List<ContentNode>) {
     if (!hasContent) return
 
     androidx.compose.foundation.layout.FlowRow(
-        modifier = Modifier.padding(top = 10.dp),
+        modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.Start
     ) {
         nodes.forEachIndexed { index, node ->
@@ -927,7 +1234,7 @@ private fun ExportDialog(
         onDismissRequest = onDismiss,
         title = { Text("导出 / 分享") },
         text = {
-            androidx.compose.foundation.layout.Column {
+            Column {
                 Text(
                     "选择导出格式，导出内容已适配手机屏幕展示",
                     style = MaterialTheme.typography.bodySmall,
@@ -949,7 +1256,7 @@ private fun ExportDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                androidx.compose.foundation.layout.Row(
+                Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -989,7 +1296,7 @@ private fun ExportOption(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
@@ -999,7 +1306,7 @@ private fun ExportOption(
     ) {
         Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.size(12.dp))
-        androidx.compose.foundation.layout.Column {
+        Column {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(
                 subtitle,

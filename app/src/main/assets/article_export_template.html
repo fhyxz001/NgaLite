@@ -14,7 +14,7 @@
         html, body {
             margin: 0;
             padding: 0;
-            background: #f3f4f6;
+            background: #FFF8E7;
             color: #1f2937;
             font-family: 'PingFang SC', 'Helvetica Neue', STHeiti, 'Microsoft Yahei', sans-serif;
         }
@@ -25,27 +25,27 @@
             width: 100%;
             max-width: 100%;
             margin: 0 auto;
-            padding: 16px 14px 22px;
+            padding: 20px 18px 26px;
             border-radius: 14px;
-            background: #ffffff;
-            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+            background: #FFFDF7;
+            box-shadow: 0 8px 30px rgba(180, 150, 80, 0.10);
         }
         .title {
-            margin: 0 0 14px;
+            margin: 0 0 16px;
             font-size: 20px;
             line-height: 1.4;
             font-weight: 700;
-            color: #111827;
+            color: #1a1a1a;
         }
-        .post {
-            padding: 14px 0;
-            border-top: 1px solid #e5e7eb;
+        /* 主楼卡片 */
+        .post-main {
+            padding: 16px;
+            margin-bottom: 16px;
+            border-radius: 12px;
+            background: #FFF3D6;
+            border: 1px solid #F0E0B8;
         }
-        .post:first-of-type {
-            border-top: none;
-            padding-top: 4px;
-        }
-        .post-head {
+        .post-main .post-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -53,90 +53,116 @@
             gap: 6px;
             margin-bottom: 10px;
         }
-        .post-head-left {
+        .post-main .post-head-left {
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .post-author {
-            font-size: 14px;
-            font-weight: 600;
-            color: #2563eb;
+        .post-main .post-author {
+            font-size: 15px;
+            font-weight: 700;
+            color: #8B6914;
         }
-        .post-floor {
+        .post-main .post-floor {
             font-size: 12px;
-            color: #1d4ed8;
-            background: #eff6ff;
+            color: #8B6914;
+            background: #FFE8B0;
             padding: 2px 8px;
             border-radius: 999px;
         }
-        .post-date {
+        .post-main .post-date {
             font-size: 12px;
-            color: #9ca3af;
+            color: #A08850;
         }
-        .post-likes {
+        .post-main .post-likes {
             font-size: 12px;
-            color: #f59e0b;
-            background: #fffbeb;
+            color: #C97B00;
+            background: #FFF0D0;
             padding: 2px 8px;
             border-radius: 999px;
         }
-        .post-content {
+        .post-main .post-content {
             font-size: 16px;
             line-height: 1.8;
-            color: #1f2937;
+            color: #2D2410;
             word-break: break-word;
         }
-        .post-content p {
+        .post-main .post-content p {
             margin: 0 0 0.8em;
         }
-        .post-content p:last-child {
+        .post-main .post-content p:last-child {
             margin-bottom: 0;
         }
-        .post-content img {
+        .post-main .post-content img {
             display: block;
             max-width: 100%;
             height: auto;
             margin: 10px 0;
             border-radius: 8px;
-            background: #f3f4f6;
+            background: #FFF8E7;
         }
-        .post-content blockquote {
+        .post-main .post-content blockquote {
             margin: 10px 0;
             padding: 10px 12px;
-            border-left: 3px solid #93c5fd;
-            background: #f8fafc;
+            border-left: 3px solid #D4B860;
+            background: #FFFAEC;
             border-radius: 6px;
-            color: #475569;
+            color: #6B5A30;
             font-size: 14px;
             line-height: 1.7;
         }
-        .post-content blockquote .quote-label {
+        .post-main .post-content blockquote .quote-label {
             display: block;
             font-size: 11px;
             font-weight: 600;
-            color: #64748b;
+            color: #8B7A40;
             margin-bottom: 4px;
         }
+        /* 回复合并区 */
+        .replies-section {
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: #FFFAF0;
+            border: 1px solid #F0E8D0;
+        }
+        .replies-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #8B6914;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #F0E0B8;
+        }
+        .reply-line {
+            font-size: 14px;
+            line-height: 1.9;
+            color: #3D3220;
+            word-break: break-word;
+        }
+        .reply-line .reply-floor {
+            font-weight: 600;
+            color: #8B6914;
+        }
+        /* 页脚 */
         .export-footer {
             margin-top: 18px;
             padding-top: 14px;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid #E8D8B0;
         }
         .export-footer-line {
             font-size: 12px;
             line-height: 1.6;
-            color: #6b7280;
+            color: #8B7B50;
         }
         .export-credit-brand {
-            color: #3b82f6;
+            color: #B8860B;
             font-weight: 700;
         }
         .export-credit {
             margin: 6px 0 0;
             font-size: 11px;
             line-height: 1.6;
-            color: #9ca3af;
+            color: #A09870;
             word-break: break-all;
         }
         .is-hidden {
@@ -146,7 +172,7 @@
             margin-top: 16px;
             padding: 12px;
             border-radius: 12px;
-            background: #f8fafc;
+            background: #FFFAEC;
             text-align: center;
         }
         .export-qrcode img {
@@ -156,12 +182,12 @@
             margin: 0 auto 8px;
             border-radius: 8px;
             background: #ffffff;
-            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 2px 10px rgba(180, 150, 80, 0.10);
         }
         .export-qrcode-tip {
             display: block;
             font-size: 12px;
-            color: #6b7280;
+            color: #8B7B50;
         }
         @page {
             margin: 8mm;
@@ -180,17 +206,14 @@
                 border-radius: 0;
                 box-shadow: none;
             }
-            .post {
-                break-inside: avoid;
-                page-break-inside: avoid;
-            }
         }
     </style>
 </head>
 <body>
     <main class="page">
         <h1 class="title">{{title}}</h1>
-        <div class="posts">{{postsHtml}}</div>
+        {{mainPostHtml}}
+        {{repliesHtml}}
         <footer class="export-footer">
             <div class="export-footer-line">{{exportedDate}}</div>
             <p class="{{appAttributionClass}}">
