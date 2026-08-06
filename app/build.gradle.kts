@@ -1,6 +1,14 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// 签名信息：CI 从环境变量读取，本地从 keystore.properties 读取（该文件已 gitignore，不入库）
+val signingProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -11,16 +19,17 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 45
-        versionName = "1.85"
+        versionCode = 46
+        versionName = "1.86"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("NGAliteKEY")
-            storePassword = "xiao123"
-            keyAlias = "key0"
-            keyPassword = "xiao123"
+            val keystoreFile = System.getenv("KEYSTORE_FILE") ?: signingProps.getProperty("keystore.file", "")
+            storeFile = rootProject.file(keystoreFile)
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: signingProps.getProperty("keystore.password")
+            keyAlias = System.getenv("KEY_ALIAS") ?: signingProps.getProperty("keystore.alias")
+            keyPassword = System.getenv("KEY_PASSWORD") ?: signingProps.getProperty("keystore.keyPassword")
         }
     }
 

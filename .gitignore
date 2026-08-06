@@ -16,3 +16,8 @@ local.properties
 帖子列表/
 帖子详情/
 zhihu-plus-plus-master/
+
+# 签名密钥（通过 GitHub Secrets 提供，不入库）
+NGAliteKEY
+ngalite.jks
+keystore.properties
