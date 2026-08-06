@@ -150,13 +150,12 @@ object ExportManager {
         """.trimMargin()
     }
 
-    /** 回复渲染：每条回复 "X楼：" 后保留正文，图片与表情以真实图片展示 */
+    /** 回复渲染：每条回复按顺序标序号 "1#/2#/..." 后保留正文，图片与表情以真实图片展示 */
     private fun buildRepliesHtml(replies: List<Post>): String {
-        val lines = replies.joinToString("\n") { post ->
+        val lines = replies.mapIndexed { index, post ->
             val body = post.contentNodes.joinToString("") { node -> replyNodeToHtml(node) }
-            val floorNum = post.floor.filter { it.isDigit() }.ifBlank { post.floor }
-            """<div class="reply-line"><span class="reply-floor">${escapeHtml(floorNum)}楼：</span>$body</div>"""
-        }
+            """<div class="reply-line"><span class="reply-floor">${index + 1}# </span>$body</div>"""
+        }.joinToString("\n")
         return """
         |<div class="replies-section">
         |    <div class="replies-title">回复（${replies.size}条）</div>
@@ -185,8 +184,9 @@ object ExportManager {
     /** 回复正文渲染：紧凑内联文本，图片/表情保留为真实图片 */
     private fun replyNodeToHtml(node: ContentNode): String = when (node) {
         is ContentNode.Text -> {
-            val text = node.text.trim().replace("\n", "<br>")
-            if (text.isBlank()) "" else escapeHtml(text)
+            val text = node.text.trim()
+            // 先转义再替换换行，避免 <br> 标签被转义成 &lt;br&gt; 显示为文字
+            if (text.isBlank()) "" else escapeHtml(text).replace("\n", "<br>")
         }
         is ContentNode.Image -> "<img class=\"reply-img\" src=\"${escapeHtml(node.url)}\" alt=\"图片\" />"
         is ContentNode.Quote -> "<span class=\"reply-quote\">「${escapeHtml(node.content.trim())}」</span>"
@@ -218,7 +218,7 @@ object ExportManager {
         // 回复合并输出
         if (replies.isNotEmpty()) {
             sb.append("### 回复\n\n")
-            replies.forEach { post ->
+            replies.forEachIndexed { index, post ->
                 val textContent = post.contentNodes.mapNotNull { node ->
                     when (node) {
                         is ContentNode.Text -> node.text.trim().takeIf { it.isNotBlank() }
@@ -227,8 +227,7 @@ object ExportManager {
                         is ContentNode.Emoji -> "[表情]"
                     }
                 }.joinToString("")
-                val floorNum = post.floor.filter { it.isDigit() }.ifBlank { post.floor }
-                sb.append("- ").append(floorNum).append("楼：").append(textContent).append("\n")
+                sb.append("- ").append(index + 1).append("# ").append(textContent).append("\n")
             }
         }
         return sb.toString().trimEnd()

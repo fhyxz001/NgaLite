@@ -303,9 +303,11 @@ class DetailViewModel : ViewModel() {
                 val html = ExportManager.buildExportHtml(context, content, includeAttribution)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val link = ExportManager.uploadHtmlToPad(inlined)
+                // 分享文本带帖子标题，便于接收方直接知道内容
+                val shareText = if (content.title.isBlank()) link else "${content.title} $link"
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", link))
-                onResult(true, link)
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", shareText))
+                onResult(true, shareText)
             } catch (e: Exception) {
                 onResult(false, "分享失败: ${e.message}")
             }
@@ -408,7 +410,7 @@ fun DetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
-    var shareLink by remember { mutableStateOf<String?>(null) }
+    var shareText by remember { mutableStateOf<String?>(null) }
     var fullScreenState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -608,7 +610,7 @@ fun DetailScreen(
                 vm.exportShareLink(context, includeAttribution) { success, msg ->
                     isExporting = false
                     if (success) {
-                        shareLink = msg
+                        shareText = msg
                         showExportDialog = false
                     } else {
                         toast(msg)
@@ -619,8 +621,8 @@ fun DetailScreen(
     }
 
     // 分享链接成功弹窗
-    shareLink?.let { link ->
-        ShareLinkDialog(link = link, onDismiss = { shareLink = null })
+    shareText?.let { text ->
+        ShareLinkDialog(shareText = text, onDismiss = { shareText = null })
     }
 
     // 全屏图片查看
@@ -1250,9 +1252,9 @@ private fun ExportOption(
     }
 }
 
-/** 分享链接生成成功弹窗：链接已自动复制到剪贴板，可再次复制或关闭 */
+/** 分享链接生成成功弹窗：标题+链接已自动复制到剪贴板，可再次复制或关闭 */
 @Composable
-private fun ShareLinkDialog(link: String, onDismiss: () -> Unit) {
+private fun ShareLinkDialog(shareText: String, onDismiss: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1260,13 +1262,13 @@ private fun ShareLinkDialog(link: String, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text(
-                    "链接已复制到剪贴板：",
+                    "已复制到剪贴板：",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    link,
+                    shareText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -1280,9 +1282,9 @@ private fun ShareLinkDialog(link: String, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", link))
-                android.widget.Toast.makeText(context, "已复制链接", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("复制链接") }
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", shareText))
+                android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+            }) { Text("复制") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("关闭") }
