@@ -24,7 +24,12 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.ui.ExperimentalTextApi
+import androidx.compose.ui.text.InlineTextContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.appendInlineContent
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -1021,12 +1026,14 @@ private fun groupContentNodes(nodes: List<ContentNode>): List<NodeGroup> {
 
 /**
  * 将连续的文本和表情节点渲染为内联富文本，表情图片从 assets 加载。
- * 使用 FlowRow 实现文本与表情图片的行内混排。
+ * 使用 AnnotatedString + inlineContent 让表情与文字垂直居中对齐（TextCenter）。
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalTextApi::class)
 @Composable
 private fun InlineRichText(nodes: List<ContentNode>) {
     val emojiExists = emojiExistsCache
+    // 表情大小：两倍于原来的 34.dp
+    val emojiSize = 68.sp
 
     val hasContent = nodes.any { node ->
         when (node) {
@@ -1037,47 +1044,59 @@ private fun InlineRichText(nodes: List<ContentNode>) {
     }
     if (!hasContent) return
 
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = Modifier.padding(top = 4.dp),
-        horizontalArrangement = Arrangement.Start
-    ) {
-        nodes.forEachIndexed { index, node ->
-            // 使用 key 防止 Compose 位置记忆化在节点类型变化时错配状态
-            key(index, node::class) {
+    val inlineContent = remember(nodes) {
+        buildMap<String, InlineTextContent> {
+            nodes.forEachIndexed { index, node ->
+                if (node is ContentNode.Emoji) {
+                    val key = "${node.folder}/${node.name}"
+                    if (key in emojiExists) {
+                        put(
+                            "emoji-$index",
+                            InlineTextContent(
+                                Placeholder(
+                                    width = emojiSize,
+                                    height = emojiSize,
+                                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
+                                )
+                            ) {
+                                AsyncImage(
+                                    model = "file:///android_asset/$key.png",
+                                    contentDescription = node.name,
+                                    modifier = Modifier.fillMaxSize(),
+                                    placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Text(
+        text = buildAnnotatedString {
+            nodes.forEachIndexed { index, node ->
                 when (node) {
                     is ContentNode.Text -> {
-                        if (node.text.isNotBlank()) {
-                            Text(
-                                node.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        if (node.text.isNotBlank()) append(node.text)
                     }
                     is ContentNode.Emoji -> {
                         val key = "${node.folder}/${node.name}"
                         if (key in emojiExists) {
-                            AsyncImage(
-                                model = "file:///android_asset/$key.png",
-                                contentDescription = node.name,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .padding(horizontal = 1.dp),
-                                placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            )
+                            appendInlineContent("emoji-$index", "[${node.name}]")
                         } else {
-                            Text(
-                                "[s:${node.folder}:${node.name}]",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.outline
-                            )
+                            append("[s:${node.folder}:${node.name}]")
                         }
                     }
                     else -> {}
                 }
             }
-        }
-    }
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        inlineContent = inlineContent,
+        modifier = Modifier.padding(top = 4.dp)
+    )
 }
 
 @Composable

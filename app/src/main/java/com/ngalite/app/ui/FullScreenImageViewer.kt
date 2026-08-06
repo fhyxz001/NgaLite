@@ -13,9 +13,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,7 +52,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 全屏图片查看器：支持左右滑动切换、长按保存到相册、单击关闭。
+ * 全屏图片查看器：支持左右滑动切换、右下角按钮保存到相册、单击关闭。
  *
  * @param images 图片 URL 列表
  * @param initialIndex 初始展示的图片索引
@@ -120,12 +126,25 @@ fun FullScreenImageViewer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(page) {
-                            detectTapGestures(
-                                onTap = { onDismiss() },
-                                onLongPress = { requestSave(images[page]) }
-                            )
+                            detectTapGestures(onTap = { onDismiss() })
                         },
                     contentScale = ContentScale.Fit
+                )
+            }
+
+            // 下载按钮：右下角保存当前图片
+            IconButton(
+                onClick = { requestSave(images[pagerState.currentPage]) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+                    .size(48.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = "保存图片",
+                    tint = Color.White
                 )
             }
 

@@ -769,12 +769,14 @@ private fun TopicItem(
                     )
                 }
             }
-            Text(
-                topic.replyTime,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            if (topic.replyTime.isNotBlank()) {
+                Text(
+                    topic.replyTime,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }
