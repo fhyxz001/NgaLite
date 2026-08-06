@@ -24,7 +24,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -35,6 +38,7 @@ import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 /**
  * 帖子导出管理器：支持导出 Markdown、图片、HTML、PDF，输出适配手机屏幕 16:9 展示。
@@ -329,6 +333,44 @@ object ExportManager {
             "webp" -> "image/webp"
             "bmp" -> "image/bmp"
             else -> "image/jpeg"
+        }
+    }
+
+    // ---- Pad 分享 ----
+
+    private const val PAD_PUSH_URL = "https://pad.genwebapp.com/push"
+    private const val PAD_BASE = "https://pad.genwebapp.com/p/"
+    private const val PAD_RANDOM_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+    /**
+     * 将帖子 HTML 上传到 pad 服务，生成可访问的分享链接。
+     * padId 使用"当前毫秒时间戳 + 10 位随机字符"生成；成功以响应中的 ok 字段为准，并采用响应返回的 padId 拼接链接。
+     */
+    suspend fun uploadHtmlToPad(html: String): String = withContext(Dispatchers.IO) {
+        val random = (1..10).map { PAD_RANDOM_CHARS[Random.nextInt(PAD_RANDOM_CHARS.length)] }.joinToString("")
+        val body = JSONObject()
+            .put("padId", "${System.currentTimeMillis()}$random")
+            .put("content", html)
+            .toString()
+        val req = Request.Builder()
+            .url(PAD_PUSH_URL)
+            .header("User-Agent", NgaApi.UA)
+            .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        imageClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
+            val responseBody = resp.body?.string() ?: throw RuntimeException("响应为空")
+            val json = JSONObject(responseBody)
+            if (!json.optBoolean("ok", false)) {
+                val reason = json.optString("message")
+                    .ifBlank { json.optString("error") }
+                    .ifBlank { "服务端返回失败" }
+                throw RuntimeException("$reason")
+            }
+            val finalPadId = json.optString("padId").ifBlank {
+                throw RuntimeException("响应缺少 padId")
+            }
+            PAD_BASE + finalPadId
         }
     }
 

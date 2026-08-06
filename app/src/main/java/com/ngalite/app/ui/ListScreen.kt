@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +72,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.ngalite.app.NgaApp
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.DisplayMode
+import com.ngalite.app.data.DisplayModeStore
 import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumRepository
@@ -311,8 +314,6 @@ class ListViewModel : ViewModel() {
     }
 }
 
-enum class DisplayMode { TEXT, WATERFALL }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForumThreadsScreen(
@@ -325,7 +326,8 @@ fun ForumThreadsScreen(
     val currentForum by vm.currentForum.collectAsState()
     var isFavorite by remember(currentForum.fid) { mutableStateOf(FavoriteStore.isFavorite(currentForum.fid)) }
     var showLoginDialog by remember { mutableStateOf(false) }
-    var displayMode by rememberSaveable { mutableStateOf(DisplayMode.TEXT) }
+    // 进入板块时读取该板块上次选择的展示形式，切换时写回持久化
+    var displayMode by rememberSaveable(fid) { mutableStateOf(DisplayModeStore.getMode(fid)) }
     val listState = rememberLazyListState()
     val gridState = rememberLazyStaggeredGridState()
 
@@ -465,7 +467,10 @@ fun ForumThreadsScreen(
                                 isFavorite = isFavorite,
                                 displayMode = displayMode,
                                 onBack = onBack,
-                                onToggleMode = { displayMode = DisplayMode.WATERFALL },
+                                onToggleMode = {
+                                    displayMode = DisplayMode.WATERFALL
+                                    DisplayModeStore.setMode(fid, DisplayMode.WATERFALL)
+                                },
                                 onToggleFavorite = {
                                     FavoriteStore.toggle(currentForum.fid)
                                     isFavorite = FavoriteStore.isFavorite(currentForum.fid)
@@ -543,7 +548,7 @@ fun ForumThreadsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
-                            .background(Color(0xFFF3F3F3)),
+                            .background(Color(0xFFF5F6F8)),
                         contentPadding = PaddingValues(
                             start = 12.dp,
                             end = 12.dp,
@@ -551,7 +556,7 @@ fun ForumThreadsScreen(
                             bottom = 12.dp
                         ),
                         verticalItemSpacing = 8.dp,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item(key = "header", span = StaggeredGridItemSpan.FullLine) {
                             ListHeader(
@@ -559,7 +564,10 @@ fun ForumThreadsScreen(
                                 isFavorite = isFavorite,
                                 displayMode = displayMode,
                                 onBack = onBack,
-                                onToggleMode = { displayMode = DisplayMode.TEXT },
+                                onToggleMode = {
+                                    displayMode = DisplayMode.TEXT
+                                    DisplayModeStore.setMode(fid, DisplayMode.TEXT)
+                                },
                                 onToggleFavorite = {
                                     FavoriteStore.toggle(currentForum.fid)
                                     isFavorite = FavoriteStore.isFavorite(currentForum.fid)
@@ -781,7 +789,7 @@ private fun TopicItem(
     }
 }
 
-/** 瀑布流帖子项：有图片时展示图片+毛玻璃标题，无图片时展示放大文字卡片 */
+/** 瀑布流帖子项：有图片时 TopCrop 展示图片+底部渐变遮罩标题，无图片时展示放大文字卡片 */
 @Composable
 private fun WaterfallTopicItem(
     topic: Topic,
@@ -813,31 +821,34 @@ private fun WaterfallTopicItem(
                 .aspectRatio(aspectRatio)
         ) {
             if (imageUrl != null) {
-                // 有图片：展示图片 + 底部毛玻璃标题
+                // 有图片：TopCrop 保留图片上半部分主体，底部渐变遮罩保证标题可读
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = topic.title,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter
                 )
 
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .height(76.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.45f to Color.Black.copy(alpha = 0.35f),
+                                1f to Color.Black.copy(alpha = 0.88f)
+                            )
+                        )
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.72f))
-                    )
                     Text(
                         topic.title,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .wrapContentHeight(Alignment.CenterVertically)
-                            .padding(horizontal = 10.dp),
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,

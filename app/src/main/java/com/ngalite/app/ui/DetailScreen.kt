@@ -33,6 +33,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -285,6 +286,32 @@ class DetailViewModel : ViewModel() {
         }
     }
 
+    /** 上传 HTML 生成分享链接，成功后自动复制链接到剪贴板 */
+    fun exportShareLink(
+        context: Context,
+        includeAttribution: Boolean,
+        onResult: (Boolean, String) -> Unit,
+    ) {
+        val content = exportContent()
+        if (content == null) {
+            onResult(false, "内容未加载完成")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val cookie = CookieStore.get()
+                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                val inlined = ExportManager.inlineImagesInHtml(html, cookie)
+                val link = ExportManager.uploadHtmlToPad(inlined)
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", link))
+                onResult(true, link)
+            } catch (e: Exception) {
+                onResult(false, "分享失败: ${e.message}")
+            }
+        }
+    }
+
     /** 导出图片到相册（按手机屏幕宽度渲染） */
     fun exportImage(
         context: Context,
@@ -381,6 +408,7 @@ fun DetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
+    var shareLink by remember { mutableStateOf<String?>(null) }
     var fullScreenState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     val writeStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -574,8 +602,25 @@ fun DetailScreen(
                 vm.exportPdf(context, includeAttribution)
                 toast("已打开打印对话框，可选择保存为 PDF")
                 showExportDialog = false
+            },
+            onExportShareLink = { includeAttribution ->
+                isExporting = true
+                vm.exportShareLink(context, includeAttribution) { success, msg ->
+                    isExporting = false
+                    if (success) {
+                        shareLink = msg
+                        showExportDialog = false
+                    } else {
+                        toast(msg)
+                    }
+                }
             }
         )
+    }
+
+    // 分享链接成功弹窗
+    shareLink?.let { link ->
+        ShareLinkDialog(link = link, onDismiss = { shareLink = null })
     }
 
     // 全屏图片查看
@@ -1032,8 +1077,12 @@ private fun groupContentNodes(nodes: List<ContentNode>): List<NodeGroup> {
 @Composable
 private fun InlineRichText(nodes: List<ContentNode>) {
     val emojiExists = emojiExistsCache
-    // 表情大小：两倍于原来的 34.dp
-    val emojiSize = 68.sp
+    // 表情占位符高度不能超过行高，否则会溢出行框与上下行文字重叠。
+    // 尺寸取 34.sp（原 34.dp），并给含表情的段落显式设 lineHeight 恰好容纳它
+    val emojiSize = 34.sp
+    val hasEmoji = nodes.any { it is ContentNode.Emoji }
+    val baseStyle = MaterialTheme.typography.bodyMedium
+    val textStyle = if (hasEmoji) baseStyle.copy(lineHeight = emojiSize) else baseStyle
 
     val hasContent = nodes.any { node ->
         when (node) {
@@ -1092,7 +1141,7 @@ private fun InlineRichText(nodes: List<ContentNode>) {
                 }
             }
         },
-        style = MaterialTheme.typography.bodyMedium,
+        style = textStyle,
         color = MaterialTheme.colorScheme.onSurface,
         inlineContent = inlineContent,
         modifier = Modifier.padding(top = 4.dp)
@@ -1107,6 +1156,7 @@ private fun ExportDialog(
     onExportHtml: (includeAttribution: Boolean) -> Unit,
     onExportImage: (includeAttribution: Boolean) -> Unit,
     onExportPdf: (includeAttribution: Boolean) -> Unit,
+    onExportShareLink: (includeAttribution: Boolean) -> Unit,
 ) {
     var includeAttribution by remember { mutableStateOf(true) }
 
@@ -1122,6 +1172,9 @@ private fun ExportDialog(
                 )
                 Spacer(Modifier.height(12.dp))
 
+                ExportOption(Icons.Default.Link, "分享链接", "上传 HTML 生成可访问链接") {
+                    onExportShareLink(includeAttribution)
+                }
                 ExportOption(Icons.Default.Code, "Markdown", "复制为 Markdown 文本") {
                     onExportMarkdown(includeAttribution)
                 }
@@ -1195,4 +1248,44 @@ private fun ExportOption(
             )
         }
     }
+}
+
+/** 分享链接生成成功弹窗：链接已自动复制到剪贴板，可再次复制或关闭 */
+@Composable
+private fun ShareLinkDialog(link: String, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分享链接已生成") },
+        text = {
+            Column {
+                Text(
+                    "链接已复制到剪贴板：",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    link,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(12.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", link))
+                android.widget.Toast.makeText(context, "已复制链接", android.widget.Toast.LENGTH_SHORT).show()
+            }) { Text("复制链接") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
 }

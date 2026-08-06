@@ -19,17 +19,20 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 46
-        versionName = "1.86"
+        versionCode = 47
+        versionName = "1.87"
     }
 
     signingConfigs {
         create("release") {
-            val keystoreFile = System.getenv("KEYSTORE_FILE") ?: signingProps.getProperty("keystore.file", "")
-            storeFile = rootProject.file(keystoreFile)
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: signingProps.getProperty("keystore.password")
-            keyAlias = System.getenv("KEY_ALIAS") ?: signingProps.getProperty("keystore.alias")
-            keyPassword = System.getenv("KEY_PASSWORD") ?: signingProps.getProperty("keystore.keyPassword")
+            // 本地未配置密钥时跳过（CI 始终通过环境变量提供），避免配置阶段因空路径失败
+            val keystoreFile = System.getenv("KEYSTORE_FILE") ?: signingProps.getProperty("keystore.file")
+            if (!keystoreFile.isNullOrBlank()) {
+                storeFile = rootProject.file(keystoreFile)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: signingProps.getProperty("keystore.password")
+                keyAlias = System.getenv("KEY_ALIAS") ?: signingProps.getProperty("keystore.alias")
+                keyPassword = System.getenv("KEY_PASSWORD") ?: signingProps.getProperty("keystore.keyPassword")
+            }
         }
     }
 
