@@ -1,7 +1,9 @@
 package com.ngalite.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,8 +26,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddToHomeScreen
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,6 +45,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumCategory
+import com.ngalite.app.data.ShortcutHelper
 
 @Composable
 fun CommunityScreen(
@@ -62,6 +70,7 @@ fun CommunityScreen(
 ) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
+    var shortcutForum by remember { mutableStateOf<Forum?>(null) }
 
     LaunchedEffect(Unit) { vm.load(context) }
 
@@ -78,9 +87,34 @@ fun CommunityScreen(
                 onQueryChange = vm::updateQuery,
                 onCategoryClick = vm::selectCategory,
                 onForumClick = { onForumClick(it.fid) },
+                onForumLongClick = { shortcutForum = it },
                 modifier = Modifier.padding(padding)
             )
         }
+    }
+
+    // 长按板块弹出"添加到桌面"确认对话框
+    shortcutForum?.let { forum ->
+        AlertDialog(
+            onDismissRequest = { shortcutForum = null },
+            icon = { Icon(Icons.Default.AddToHomeScreen, contentDescription = null) },
+            title = { Text("添加到桌面") },
+            text = { Text("将「${forum.name}」添加到桌面快捷方式，点击后直接进入该板块。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val success = ShortcutHelper.requestPinShortcut(context, forum)
+                    if (!success) {
+                        android.widget.Toast.makeText(
+                            context, "当前设备不支持桌面快捷方式", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    shortcutForum = null
+                }) { Text("添加") }
+            },
+            dismissButton = {
+                TextButton(onClick = { shortcutForum = null }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -112,6 +146,7 @@ private fun CommunityContent(
     onQueryChange: (String) -> Unit,
     onCategoryClick: (ForumCategory) -> Unit,
     onForumClick: (Forum) -> Unit,
+    onForumLongClick: (Forum) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
@@ -154,6 +189,7 @@ private fun CommunityContent(
                 forums = state.searchResults,
                 emptyMessage = "\u6ca1\u6709\u627e\u5230\u76f8\u5173\u7248\u5757",
                 onForumClick = onForumClick,
+                onForumLongClick = onForumLongClick,
                 modifier = Modifier.weight(1f)
             )
         } else {
@@ -167,6 +203,7 @@ private fun CommunityContent(
                 forums = state.selectedCategory.forums,
                 emptyMessage = "\u8fd9\u91cc\u8fd8\u6ca1\u6709\u6536\u85cf\u7684\u7248\u5757\n\u70b9\u51fb\u661f\u6807\u5c06\u5b83\u4eec\u6dfb\u52a0\u5230\u6b64\u5904",
                 onForumClick = onForumClick,
+                onForumLongClick = onForumLongClick,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -222,6 +259,7 @@ private fun ForumGrid(
     forums: List<Forum>,
     emptyMessage: String,
     onForumClick: (Forum) -> Unit,
+    onForumLongClick: (Forum) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -240,7 +278,8 @@ private fun ForumGrid(
                 items(forums, key = { "forum_${it.fid}" }) { forum ->
                     ForumGridItem(
                         forum = forum,
-                        onClick = { onForumClick(forum) }
+                        onClick = { onForumClick(forum) },
+                        onLongClick = { onForumLongClick(forum) }
                     )
                 }
             }
@@ -248,14 +287,20 @@ private fun ForumGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ForumGridItem(
     forum: Forum,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)

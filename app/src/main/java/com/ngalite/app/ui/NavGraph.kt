@@ -24,6 +24,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -54,18 +55,25 @@ object Routes {
 }
 
 @Composable
-fun NavGraph() {
+fun NavGraph(initialFid: String? = null) {
     val nav = rememberNavController()
 
-    /** 閬垮厤鍗曟瀵艰埅寮傚父瀵艰嚧鐣岄潰宕╂簝锛屼笉璺ㄦ搷浣滃悶鎺夋甯稿鑸€?*/
+    /** 閬垮厤鍗曟瀵艰埅寮傚父瀵艰嚧鐣岄潰宕╂簝锛屼笉璺ㄦ搷浣滃悶鎺夋甯稿鑸€?*/
     fun navSafe(block: () -> Unit) {
         runCatching { block() }.onFailure { e ->
             Log.e("NavGraph", "导航操作失败", e)
         }
     }
 
+    // 从桌面快捷方式启动时，直接导航到帖子列表页
+    LaunchedEffect(initialFid) {
+        if (!initialFid.isNullOrBlank()) {
+            navSafe { nav.navigate(Routes.forumThreads(initialFid)) }
+        }
+    }
+
     /**
-     * 安全获取 ForumThreads 璺敱鐨?backStackEntry锛岀敤浜?Detail 椤佃鍙栧綋鍓嶆澘鍧楀悕绉般€?
+     * 安全获取 ForumThreads 璺敱鐨?backStackEntry锛岀敤浜?Detail 椤佃鍙栧綋鍓嶆澘鍧楀悕绉般€?
      */
     fun safeForumThreadsEntry(navController: NavController) = runCatching {
         navController.getBackStackEntry(Routes.FORUM_THREADS)

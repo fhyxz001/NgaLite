@@ -90,6 +90,22 @@ import okhttp3.Request
 
 private val PostTextBackground = Color(0xFFF3F3F3)
 
+/** 楼层徽标颜色组：5 种柔和色调循环使用，相邻楼层颜色不同 */
+private val floorBadgeColors = listOf(
+    Color(0xFFE3F2FD) to Color(0xFF1565C0), // 蓝
+    Color(0xFFE8F5E9) to Color(0xFF2E7D32), // 绿
+    Color(0xFFFFF3E0) to Color(0xFFE65100), // 橙
+    Color(0xFFF3E5F5) to Color(0xFF6A1B9A), // 紫
+    Color(0xFFE0F7FA) to Color(0xFF00695C)  // 青
+)
+
+/** 从楼层文本（如 "3楼"）提取数字，映射到颜色组索引 */
+private fun floorColorPair(floor: String): Pair<Color, Color> {
+    val num = floor.filter { it.isDigit() }.toIntOrNull() ?: 0
+    val index = if (num > 0) (num - 1) % floorBadgeColors.size else 0
+    return floorBadgeColors[index]
+}
+
 sealed interface DetailUiState {
     data object Loading : DetailUiState
     data class Success(
@@ -603,12 +619,21 @@ private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    post.floor,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                val (badgeBg, badgeText) = remember(post.floor) { floorColorPair(post.floor) }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(badgeBg)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        post.floor,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeText
+                    )
+                }
                 Text(
                     post.author,
                     style = MaterialTheme.typography.titleSmall,
