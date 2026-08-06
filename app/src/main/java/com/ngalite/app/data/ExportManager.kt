@@ -136,7 +136,7 @@ object ExportManager {
         |    <div class="post-head">
         |        <div class="post-head-left">
         |            <span class="post-author">${escapeHtml(post.author)}</span>
-        |            <span class="post-floor">${escapeHtml(post.floor)}</span>
+        |            <span class="post-lz">楼主</span>
         |        </div>
         |        <span class="post-date">${escapeHtml(post.date)}</span>
         |        $likesHtml
@@ -146,20 +146,12 @@ object ExportManager {
         """.trimMargin()
     }
 
-    /** 回复合并渲染：每条回复压缩为一行 "X楼：内容"，仅保留纯文字 */
+    /** 回复渲染：每条回复 "X楼：" 后保留正文，图片与表情以真实图片展示 */
     private fun buildRepliesHtml(replies: List<Post>): String {
         val lines = replies.joinToString("\n") { post ->
-            val textContent = post.contentNodes.mapNotNull { node ->
-                when (node) {
-                    is ContentNode.Text -> node.text.trim().takeIf { it.isNotBlank() }
-                    is ContentNode.Quote -> "「${node.content.trim()}」"
-                    is ContentNode.Image -> "[图片]"
-                    is ContentNode.Emoji -> "[表情]"
-                }
-            }.joinToString("")
-
+            val body = post.contentNodes.joinToString("") { node -> replyNodeToHtml(node) }
             val floorNum = post.floor.filter { it.isDigit() }.ifBlank { post.floor }
-            """<div class="reply-line"><span class="reply-floor">${escapeHtml(floorNum)}楼：</span>${escapeHtml(textContent)}</div>"""
+            """<div class="reply-line"><span class="reply-floor">${escapeHtml(floorNum)}楼：</span>$body</div>"""
         }
         return """
         |<div class="replies-section">
@@ -184,6 +176,18 @@ object ExportManager {
         is ContentNode.Emoji -> {
             "<img src=\"https://img.nga.178.com/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" class=\"emoji\" />"
         }
+    }
+
+    /** 回复正文渲染：紧凑内联文本，图片/表情保留为真实图片 */
+    private fun replyNodeToHtml(node: ContentNode): String = when (node) {
+        is ContentNode.Text -> {
+            val text = node.text.trim().replace("\n", "<br>")
+            if (text.isBlank()) "" else escapeHtml(text)
+        }
+        is ContentNode.Image -> "<img class=\"reply-img\" src=\"${escapeHtml(node.url)}\" alt=\"图片\" />"
+        is ContentNode.Quote -> "<span class=\"reply-quote\">「${escapeHtml(node.content.trim())}」</span>"
+        is ContentNode.Emoji ->
+            "<img class=\"reply-emoji\" src=\"https://img.nga.178.com/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" />"
     }
 
     // ---- Markdown ----

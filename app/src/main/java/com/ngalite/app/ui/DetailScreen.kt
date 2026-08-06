@@ -34,8 +34,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Html
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
@@ -634,7 +632,6 @@ private fun DetailHeader(
     onShare: () -> Unit
 ) {
     val totalPosts = (if (originalPost != null) 1 else 0) + comments.size
-    val totalLikes = (originalPost?.likes?.toIntOrNull() ?: 0) + comments.sumOf { it.likes.toIntOrNull() ?: 0 }
     val views = originalPost?.views?.toIntOrNull() ?: 0
 
     Column(
@@ -693,16 +690,6 @@ private fun DetailHeader(
             )
             Text(
                 "${comments.size} 回复",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "·",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-            Text(
-                "$totalLikes 赞",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -779,7 +766,7 @@ private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Un
             PostContent(post.contentNodes, onImageClick)
 
             // 底部互动栏
-            PostFooter(likes = post.likes, views = post.views)
+            PostFooter(views = post.views)
         }
     }
 }
@@ -845,7 +832,7 @@ private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
             PostContent(post.contentNodes, onImageClick)
 
             // 底部互动栏
-            PostFooter(likes = post.likes, views = post.views)
+            PostFooter(views = post.views)
         }
     }
 }
@@ -876,11 +863,10 @@ private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
 }
 
 /**
- * 底部互动栏：点赞数 + 浏览数
+ * 底部互动栏：浏览数
  */
 @Composable
-private fun PostFooter(likes: String, views: String) {
-    val likeCount = likes.toIntOrNull() ?: 0
+private fun PostFooter(views: String) {
     val viewCount = views.toIntOrNull() ?: 0
 
     Row(
@@ -890,22 +876,6 @@ private fun PostFooter(likes: String, views: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // 点赞
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (likeCount > 0) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = "赞",
-                modifier = Modifier.size(14.dp),
-                tint = if (likeCount > 0) Color(0xFFE53935) else MaterialTheme.colorScheme.outline
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "$likeCount",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (likeCount > 0) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
         // 浏览
         if (viewCount > 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -142,7 +142,12 @@ object NgaParser {
     private fun parsePostsFromDoc(doc: org.jsoup.nodes.Document): List<Post> {
         val rows = doc.select("tr.postrow")
         return rows.mapIndexedNotNull { index, row ->
-            val author = row.selectFirst("[id^=postauthor]")?.text()?.trim() ?: ""
+            val authorEl = row.selectFirst("[id^=postauthor]")
+            val author = if (authorEl == null) "" else {
+                // 用户锚点内会附带"楼主"等身份标签，需剔除后再取用户名
+                authorEl.select(".hld__post-author").remove()
+                authorEl.text().trim()
+            }
             val date = row.selectFirst("[id^=postdate]")?.text()?.trim() ?: ""
             val contentEl = row.selectFirst("[id^=postcontent]") ?: return@mapIndexedNotNull null
             val rawText = htmlToText(contentEl.html())
