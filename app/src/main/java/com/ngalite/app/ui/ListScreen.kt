@@ -56,9 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -842,23 +840,12 @@ private fun WaterfallTopicItem(
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                // 模糊层：复制图片底部区域并模糊（API 31+ 生效，低版本降级为纯色叠加）
-                if (imageUrl != null) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(24.dp),
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.BottomCenter
-                    )
-                }
                 // 深色半透明遮罩，营造不透明玻璃质感
+                // 不再重复加载同一图片做模糊层，改为纯色遮罩降低性能开销
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.68f))
+                        .background(Color.Black.copy(alpha = 0.72f))
                 )
                 // 标题文字
                 Text(

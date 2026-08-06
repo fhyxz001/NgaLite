@@ -8,9 +8,6 @@ import coil.memory.MemoryCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import okhttp3.ConnectionPool
-import okhttp3.Dispatcher
-import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import com.ngalite.app.data.ForumRepository
 import com.ngalite.app.data.NgaApi
@@ -27,16 +24,14 @@ class NgaApp : Application(), ImageLoaderFactory {
         }
     }
 
-    /** 配置 Coil 全局图片加载器：内存/磁盘缓存 + 图片复用连接池 */
+    /** 配置 Coil 全局图片加载器：内存/磁盘缓存 + 复用 NgaApi 共享连接池 */
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             // 不使用淡入：缓存命中的图片立即显示，减少感知延迟
             .okHttpClient {
-                OkHttpClient.Builder()
+                NgaApi.sharedClientBuilder()
                     .connectTimeout(8, TimeUnit.SECONDS)
                     .readTimeout(15, TimeUnit.SECONDS)
-                    .connectionPool(ConnectionPool(8, 3, TimeUnit.MINUTES))
-                    .dispatcher(Dispatcher().apply { maxRequestsPerHost = 8 })
                     .build()
             }
             .memoryCache {

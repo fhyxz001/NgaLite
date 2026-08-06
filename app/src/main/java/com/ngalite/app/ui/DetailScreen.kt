@@ -158,6 +158,9 @@ class DetailViewModel : ViewModel() {
     /** 代次计数器：每次 load() 自增，用于丢弃已取消协程的结果 */
     private var loadGeneration = 0L
 
+    /** 当前加载协程，新加载前取消上一个，避免并发请求浪费带宽 */
+    private var loadJob: kotlinx.coroutines.Job? = null
+
     fun load(tid: String, forumName: String = "") {
         currentTid = tid
         currentForumName = forumName
@@ -185,11 +188,12 @@ class DetailViewModel : ViewModel() {
 
     private fun loadPage(page: Int) {
         val myGen = ++loadGeneration
+        loadJob?.cancel()
         val prevSuccess = _state.value as? DetailUiState.Success
         val prevSignature = firstPostSignature
         val prevPage = currentPage
         currentPage = page
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             // 翻页时保留已有内容、仅分页栏显示加载中；首载/无内容时才显示全屏 Loading
             _state.value = prevSuccess?.copy(isPageLoading = true) ?: DetailUiState.Loading
             try {

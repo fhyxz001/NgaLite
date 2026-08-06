@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,7 @@ fun LoginWebScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     fun captureCookies(): Boolean {
         val cookies = CookieManager.getInstance().getCookie(LOGIN_URL) ?: ""
@@ -71,6 +73,21 @@ fun LoginWebScreen(onBack: () -> Unit) {
                 loadError = "页面加载失败：${e.message}"
                 isLoading = false
             }
+        }
+    }
+
+    // 离开页面时销毁 WebView，防止内存泄漏
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.let { wv ->
+                wv.apply {
+                    stopLoading()
+                    removeAllViews()
+                    (parent as? android.view.ViewGroup)?.removeView(this)
+                    destroy()
+                }
+            }
+            webViewRef = null
         }
     }
 
@@ -107,7 +124,10 @@ fun LoginWebScreen(onBack: () -> Unit) {
         Box(modifier = Modifier.padding(padding), contentAlignment = Alignment.Center) {
             AndroidView(
                 factory = { ctx ->
-                    createWebView(ctx) { isLoading = it }.also { wv -> loadPage(wv) }
+                    createWebView(ctx) { isLoading = it }.also { wv ->
+                        webViewRef = wv
+                        loadPage(wv)
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -116,10 +136,12 @@ fun LoginWebScreen(onBack: () -> Unit) {
             }
             loadError?.let { msg ->
                 TextButton(onClick = {
-                    // 需要 WebView 引用才能重试，但这里拿不到
-                    // 用户可点返回重新进入
+                    val wv = webViewRef
+                    if (wv != null) {
+                        loadPage(wv)
+                    }
                 }) {
-                    Text("$msg\n请返回后重试", color = MaterialTheme.colorScheme.error)
+                    Text("$msg\n点击重试", color = MaterialTheme.colorScheme.error)
                 }
             }
         }

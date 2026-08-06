@@ -26,7 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddToHomeScreen
+import androidx.compose.material.icons.automirrored.filled.AddToHomeScreen
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -97,7 +97,7 @@ fun CommunityScreen(
     shortcutForum?.let { forum ->
         AlertDialog(
             onDismissRequest = { shortcutForum = null },
-            icon = { Icon(Icons.Default.AddToHomeScreen, contentDescription = null) },
+            icon = { Icon(Icons.AutoMirrored.Filled.AddToHomeScreen, contentDescription = null) },
             title = { Text("添加到桌面") },
             text = { Text("将「${forum.name}」添加到桌面快捷方式，点击后直接进入该板块。") },
             confirmButton = {

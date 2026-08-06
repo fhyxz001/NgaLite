@@ -120,10 +120,10 @@ object NgaApi {
         val tempClient = loginClient(jar)
 
         val loginResp = tempClient.newCall(loginReq).execute()
-        val bodyBytes = loginResp.body?.bytes() ?: ByteArray(0)
-        val body = String(bodyBytes, Charset.forName("GBK"))
-        val httpCode = loginResp.code
-        loginResp.close()
+        val (bodyBytes, body, httpCode) = loginResp.use { resp ->
+            val bytes = resp.body?.bytes() ?: ByteArray(0)
+            Triple(bytes, String(bytes, Charset.forName("GBK")), resp.code)
+        }
         if (httpCode !in 200..299) throw LoginException("网络错误 HTTP $httpCode")
 
         val (uid, token, username) = parseLoginResult(body, bodyBytes)
@@ -447,10 +447,10 @@ object NgaApi {
                 .build()
 
             val loginResp = client.newCall(loginReq).execute()
-            val bodyBytes = loginResp.body?.bytes() ?: ByteArray(0)
-            val body = String(bodyBytes, Charset.forName("GBK"))
-            val httpCode = loginResp.code
-            loginResp.close()
+            val (bodyBytes, body, httpCode) = loginResp.use { resp ->
+                val bytes = resp.body?.bytes() ?: ByteArray(0)
+                Triple(bytes, String(bytes, Charset.forName("GBK")), resp.code)
+            }
             if (httpCode !in 200..299) throw LoginException("网络错误 HTTP $httpCode")
 
             val (uid, token, username) = parseLoginResult(body, bodyBytes)
@@ -482,18 +482,26 @@ object NgaApi {
 
     /** 临时 CookieJar，用于捕获登录流程中服务端下发的 Set-Cookie。 */
     internal class MemCookieJar : CookieJar {
-        private val store = mutableListOf<Cookie>()
+        private val store = java.util.concurrent.CopyOnWriteArrayList<Cookie>()
+        private val lock = Any()
 
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            store.addAll(cookies)
+            if (cookies.isEmpty()) return
+            synchronized(lock) {
+                cookies.forEach { new ->
+                    store.removeAll { it.name == new.name && it.domain == new.domain }
+                    store.add(new)
+                }
+            }
         }
 
-        override fun loadForRequest(url: HttpUrl): List<Cookie> = store.toList()
+        override fun loadForRequest(url: HttpUrl): List<Cookie> = synchronized(lock) { store.toList() }
 
         /** 把捕获到的 cookie 拼成请求头格式的字符串。 */
-        fun cookieHeader(): String =
+        fun cookieHeader(): String = synchronized(lock) {
             store.distinctBy { it.name }
                 .filter { it.name.isNotBlank() }
                 .joinToString("; ") { "${it.name}=${it.value}" }
+        }
     }
 }

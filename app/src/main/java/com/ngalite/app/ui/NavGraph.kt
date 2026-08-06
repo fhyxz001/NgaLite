@@ -58,7 +58,7 @@ object Routes {
 fun NavGraph(initialFid: String? = null) {
     val nav = rememberNavController()
 
-    /** 閬垮厤鍗曟瀵艰埅寮傚父瀵艰嚧鐣岄潰宕╂簝锛屼笉璺ㄦ搷浣滃悶鎺夋甯稿鑸€?*/
+    /** 安全导航包装：捕获导航异常防止界面崩溃，不跨操作吞掉异常 */
     fun navSafe(block: () -> Unit) {
         runCatching { block() }.onFailure { e ->
             Log.e("NavGraph", "导航操作失败", e)
@@ -73,7 +73,7 @@ fun NavGraph(initialFid: String? = null) {
     }
 
     /**
-     * 安全获取 ForumThreads 璺敱鐨?backStackEntry锛岀敤浜?Detail 椤佃鍙栧綋鍓嶆澘鍧楀悕绉般€?
+     * 安全获取 ForumThreads 路由的 backStackEntry，用于 Detail 页读取当前板块名称。
      */
     fun safeForumThreadsEntry(navController: NavController) = runCatching {
         navController.getBackStackEntry(Routes.FORUM_THREADS)
@@ -262,7 +262,7 @@ fun NavGraph(initialFid: String? = null) {
                 popExitTransition = { pagePopExit() }
             ) { backStackEntry ->
                 val tid = backStackEntry.arguments?.getString("tid").orEmpty()
-                // 浠?ForumThreads 鐨?ListViewModel 鑾峰彇褰撳墠鏉垮潡鍚嶇О锛岄伩鍏嶉€氳繃璺敱浼犻€?
+                // 从 ForumThreads 的 ListViewModel 获取当前板块名称，避免通过路由传递
                 val forumName = safeForumThreadsEntry(nav)?.let { entry ->
                     viewModel<ListViewModel>(entry).currentForum.value.name
                 } ?: ""

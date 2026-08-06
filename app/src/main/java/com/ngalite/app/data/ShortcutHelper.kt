@@ -69,11 +69,11 @@ object ShortcutHelper {
         // 尝试从 assets 加载板块图标
         val iconAssetName = "icons/f${forum.fid}.png"
         try {
-            val inputStream = context.assets.open(iconAssetName)
-            val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            if (bitmap != null) {
-                return IconCompat.createWithAdaptiveBitmap(bitmap)
+            context.assets.open(iconAssetName).use { inputStream ->
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                if (bitmap != null) {
+                    return IconCompat.createWithAdaptiveBitmap(bitmap)
+                }
             }
         } catch (_: Exception) {
             // 无板块图标，走占位逻辑
