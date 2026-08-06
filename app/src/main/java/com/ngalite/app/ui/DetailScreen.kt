@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
@@ -83,7 +82,6 @@ import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
 import java.nio.charset.Charset
-import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,43 +89,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
-/** 楼层徽标颜色组：5 种柔和色调循环使用，相邻楼层颜色不同 */
-private val floorBadgeColors = listOf(
-    Color(0xFFE3F2FD) to Color(0xFF1565C0), // 蓝
-    Color(0xFFE8F5E9) to Color(0xFF2E7D32), // 绿
-    Color(0xFFFFF3E0) to Color(0xFFE65100), // 橙
-    Color(0xFFF3E5F5) to Color(0xFF6A1B9A), // 紫
-    Color(0xFFE0F7FA) to Color(0xFF00695C)  // 青
-)
-
-/** 头像背景颜色组：8 种柔和色调，根据用户名哈希选取 */
-private val avatarColors = listOf(
-    Color(0xFFE3F2FD) to Color(0xFF1565C0),
-    Color(0xFFE8F5E9) to Color(0xFF2E7D32),
-    Color(0xFFFFF3E0) to Color(0xFFE65100),
-    Color(0xFFF3E5F5) to Color(0xFF6A1B9A),
-    Color(0xFFE0F7FA) to Color(0xFF00695C),
-    Color(0xFFFCE4EC) to Color(0xFFAD1457),
-    Color(0xFFE8EAF6) to Color(0xFF283593),
-    Color(0xFFFFF8E1) to Color(0xFFF57F17),
-)
-
 /** 楼主徽标配色 */
 private val TopicOwnerBg = Color(0xFFE3F2FD)
 private val TopicOwnerText = Color(0xFF1565C0)
-
-/** 从楼层文本（如 "3楼"）提取数字，映射到颜色组索引 */
-private fun floorColorPair(floor: String): Pair<Color, Color> {
-    val num = floor.filter { it.isDigit() }.toIntOrNull() ?: 0
-    val index = if (num > 0) (num - 1) % floorBadgeColors.size else 0
-    return floorBadgeColors[index]
-}
-
-/** 根据用户名哈希选取头像配色 */
-private fun avatarColorPair(name: String): Pair<Color, Color> {
-    val hash = abs(name.hashCode())
-    return avatarColors[hash % avatarColors.size]
-}
 
 sealed interface DetailUiState {
     data object Loading : DetailUiState
@@ -772,7 +736,7 @@ private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Un
 }
 
 /**
- * 回复卡片：头像 + 用户名 + 楼层标签 + 正文 + 底部互动栏
+ * 回复卡片：仅保留回复正文内容
  */
 @Composable
 private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
@@ -782,83 +746,10 @@ private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            // 用户信息行
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Avatar(post.author, size = 36.dp)
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            post.author,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        // 楼层标签
-                        val (badgeBg, badgeText) = remember(post.floor) { floorColorPair(post.floor) }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(badgeBg)
-                                .padding(horizontal = 6.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                post.floor,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = badgeText
-                            )
-                        }
-                    }
-                    Text(
-                        post.date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             // 正文
             PostContent(post.contentNodes, onImageClick)
-
-            // 底部互动栏
-            PostFooter(views = post.views)
         }
-    }
-}
-
-/**
- * 圆形头像：用户名首字 + 柔和背景色
- */
-@Composable
-private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp = 40.dp) {
-    val (bgColor, textColor) = remember(name) { avatarColorPair(name) }
-    val initial = remember(name) {
-        name.firstOrNull { it.isLetterOrDigit() }?.toString() ?: "?"
-    }
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(bgColor),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = initial,
-            style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = textColor
-        )
     }
 }
 
