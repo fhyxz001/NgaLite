@@ -568,7 +568,7 @@ private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Un
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = PostTextBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             PostContent(post.contentNodes, onImageClick)
@@ -595,7 +595,7 @@ private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
             .padding(vertical = 4.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = PostTextBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(

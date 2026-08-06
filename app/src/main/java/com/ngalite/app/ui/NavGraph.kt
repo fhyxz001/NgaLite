@@ -5,15 +5,10 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -76,55 +71,25 @@ fun NavGraph() {
         navController.getBackStackEntry(Routes.FORUM_THREADS)
     }.getOrNull()
 
-    val tabTransitionMs = 180
-    val pageEnterMs = 280
-    val pageExitMs = 220
+    val transitionMs = 150
 
     fun AnimatedContentTransitionScope<*>.tabEnter(): EnterTransition =
-        fadeIn(animationSpec = tween(tabTransitionMs, easing = LinearOutSlowInEasing)) +
-            scaleIn(
-                initialScale = 0.985f,
-                animationSpec = tween(tabTransitionMs, easing = LinearOutSlowInEasing)
-            )
+        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.tabExit(): ExitTransition =
-        fadeOut(animationSpec = tween(120, easing = FastOutLinearInEasing)) +
-            scaleOut(
-                targetScale = 0.99f,
-                animationSpec = tween(120, easing = FastOutLinearInEasing)
-            )
+        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
 
     fun AnimatedContentTransitionScope<*>.pageEnter(): EnterTransition =
-        slideInHorizontally(
-            initialOffsetX = { it / 4 },
-            animationSpec = tween(pageEnterMs, easing = LinearOutSlowInEasing)
-        ) + fadeIn(animationSpec = tween(180, easing = LinearOutSlowInEasing))
+        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.pageExit(): ExitTransition =
-        slideOutHorizontally(
-            targetOffsetX = { -it / 12 },
-            animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
-        ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)) +
-            scaleOut(
-                targetScale = 0.99f,
-                animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
-            )
+        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
 
     fun AnimatedContentTransitionScope<*>.pagePopEnter(): EnterTransition =
-        slideInHorizontally(
-            initialOffsetX = { -it / 12 },
-            animationSpec = tween(pageEnterMs, easing = LinearOutSlowInEasing)
-        ) + fadeIn(animationSpec = tween(180, easing = LinearOutSlowInEasing))
+        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.pagePopExit(): ExitTransition =
-        slideOutHorizontally(
-            targetOffsetX = { it / 4 },
-            animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
-        ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)) +
-            scaleOut(
-                targetScale = 0.99f,
-                animationSpec = tween(pageExitMs, easing = FastOutSlowInEasing)
-            )
+        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
 
     val currentBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
