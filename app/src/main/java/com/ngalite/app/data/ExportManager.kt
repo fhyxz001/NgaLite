@@ -177,7 +177,7 @@ object ExportManager {
             "<blockquote><span class=\"quote-label\">引用</span>$body</blockquote>"
         }
         is ContentNode.Emoji -> {
-            "<img src=\"https://img.nga.178.com/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" class=\"emoji\" />"
+            "<img src=\"https://img.nga.cn/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" class=\"emoji\" />"
         }
     }
 
@@ -191,7 +191,7 @@ object ExportManager {
         is ContentNode.Image -> "<img class=\"reply-img\" src=\"${escapeHtml(node.url)}\" alt=\"图片\" />"
         is ContentNode.Quote -> "<span class=\"reply-quote\">「${escapeHtml(node.content.trim())}」</span>"
         is ContentNode.Emoji ->
-            "<img class=\"reply-emoji\" src=\"https://img.nga.178.com/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" />"
+            "<img class=\"reply-emoji\" src=\"https://img.nga.cn/attachments/${node.folder}/${node.name}.gif\" alt=\"[${node.name}]\" />"
     }
 
     // ---- Markdown ----
@@ -310,7 +310,7 @@ object ExportManager {
             .url(url)
             .header("User-Agent", NgaApi.UA)
             .header("Cookie", cookie)
-            .header("Referer", "https://bbs.nga.cn/")
+            .header("Referer", "${BaseConfig.baseUrl}/")
             .build()
         imageClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
@@ -540,7 +540,7 @@ object ExportManager {
             measureAndLayout(webView, viewportWidth, 1)
             handler.postDelayed(timeoutRunnable, timeoutMs)
             webView.loadDataWithBaseURL(
-                "https://bbs.nga.cn",
+                BaseConfig.baseUrl,
                 html,
                 "text/html",
                 "UTF-8",
@@ -601,6 +601,6 @@ object ExportManager {
                 }, 5000L)
             }
         }
-        webView.loadDataWithBaseURL("https://bbs.nga.cn", html, "text/html", "UTF-8", null)
+        webView.loadDataWithBaseURL(BaseConfig.baseUrl, html, "text/html", "UTF-8", null)
     }
 }

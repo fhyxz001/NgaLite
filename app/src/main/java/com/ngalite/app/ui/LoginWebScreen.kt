@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.NgaApi
 import kotlinx.coroutines.Dispatchers
@@ -41,8 +42,10 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.nio.charset.Charset
 
-private const val LOGIN_URL = "https://bbs.nga.cn/nuke.php?__lib=login&__act=account&login"
-private const val BASE_URL = "https://bbs.nga.cn/"
+private val LOGIN_URL: String
+    get() = "${BaseConfig.baseUrl}/nuke.php?__lib=login&__act=account&login"
+private val BASE_URL: String
+    get() = "${BaseConfig.baseUrl}/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

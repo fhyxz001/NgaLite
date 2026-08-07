@@ -88,8 +88,8 @@ object NgaParser {
         return when {
             src.startsWith("http://", ignoreCase = true) ||
                 src.startsWith("https://", ignoreCase = true) -> src
-            src.startsWith("/") -> "https://bbs.nga.cn$src"
-            else -> "https://bbs.nga.cn/$src"
+            src.startsWith("/") -> BaseConfig.baseUrl + src
+            else -> BaseConfig.baseUrl + "/" + src
         }
     }
 
@@ -126,9 +126,9 @@ object NgaParser {
             value.startsWith("//") -> "https:$value"
             value.startsWith("http://", ignoreCase = true) ||
                 value.startsWith("https://", ignoreCase = true) -> value
-            value.startsWith("/attachments/", ignoreCase = true) -> "https://img.nga.178.com$value"
+            value.startsWith("/attachments/", ignoreCase = true) -> "https://img.nga.cn$value"
             value.startsWith("./") -> UbbParser.IMG_BASE + value.removePrefix("./")
-            value.startsWith("/") -> "https://bbs.nga.cn$value"
+            value.startsWith("/") -> BaseConfig.baseUrl + value
             else -> UbbParser.IMG_BASE + value
         }
         return url.takeUnless { candidate ->

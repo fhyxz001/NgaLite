@@ -25,12 +25,15 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.launch
@@ -263,6 +267,47 @@ fun SettingsScreen(
                         }
                     }
                 )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ---- 服务器域名 ----
+            var baseDomain by remember { mutableStateOf(BaseConfig.domain()) }
+            var showBaseMenu by remember { mutableStateOf(false) }
+
+            Box {
+                SettingsRow(
+                    icon = Icons.Default.Language,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "服务器域名",
+                    subtitle = "https://$baseDomain · 切换后需重新登录",
+                    onClick = { showBaseMenu = true }
+                )
+                DropdownMenu(
+                    expanded = showBaseMenu,
+                    onDismissRequest = { showBaseMenu = false }
+                ) {
+                    BaseConfig.DOMAINS.forEach { domain ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    domain,
+                                    fontWeight = if (domain == baseDomain) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                if (domain != baseDomain) {
+                                    baseDomain = domain
+                                    BaseConfig.setDomain(domain)
+                                    // 跨域 Cookie 不通用，切换后清空登录态
+                                    CookieStore.clear()
+                                    refreshLoginState()
+                                }
+                                showBaseMenu = false
+                            }
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(20.dp))

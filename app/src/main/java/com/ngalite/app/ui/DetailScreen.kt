@@ -81,6 +81,7 @@ import coil.request.ImageRequest
 import coil.size.Dimension
 import coil.size.Size
 import com.ngalite.app.NgaApp
+import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.ContentNode
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.ExportManager
@@ -242,7 +243,7 @@ class DetailViewModel : ViewModel() {
     }
 
     private fun postUrl(): String =
-        if (currentTid.isBlank()) "" else "https://bbs.nga.cn/read.php?tid=$currentTid"
+        if (currentTid.isBlank()) "" else "${BaseConfig.baseUrl}/read.php?tid=$currentTid"
 
     private fun exportContent(): ExportManager.ExportContent? =
         (state.value as? DetailUiState.Success)?.let { success ->
@@ -380,7 +381,7 @@ private val detailPageClient by lazy { NgaApi.sharedClientBuilder().build() }
 private fun fetchThreadPage(tid: String, page: Int): String {
     if (page <= 1) return NgaApi.fetchThread(tid)
     val builder = Request.Builder()
-        .url("https://bbs.nga.cn/read.php?tid=$tid&page=$page")
+        .url("${BaseConfig.baseUrl}/read.php?tid=$tid&page=$page")
         .header("User-Agent", NgaApi.UA)
         .header("Accept-Charset", "GBK")
     val cookie = CookieStore.get()

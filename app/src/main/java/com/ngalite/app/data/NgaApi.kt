@@ -16,7 +16,9 @@ import kotlin.random.Random
 /** NGA 网络请求：携带 Cookie + 桌面 UA，按 GBK 解码 */
 object NgaApi {
 
-    private const val BASE = "https://bbs.nga.cn"
+    /** 请求域名，跟随设置页选择（bbs.nga.cn / nga.178.com / ngabbs.com） */
+    private val BASE: String
+        get() = BaseConfig.baseUrl
     internal const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
