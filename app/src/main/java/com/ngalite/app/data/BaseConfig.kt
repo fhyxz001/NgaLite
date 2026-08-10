@@ -3,11 +3,11 @@ package com.ngalite.app.data
 import android.content.Context
 import com.ngalite.app.NgaApp
 
-/** NGA 站点域名配置：设置页可选择 bbs.nga.cn / nga.178.com / ngabbs.com 作为请求 BASE。 */
+/** NGA 站点域名配置：设置页可选择 bbs.nga.cn / ngabbs.com 作为请求 BASE。 */
 object BaseConfig {
 
     /** 可选域名（顺序即设置页展示顺序），首个为默认 */
-    val DOMAINS = listOf("bbs.nga.cn", "nga.178.com", "ngabbs.com")
+    val DOMAINS = listOf("bbs.nga.cn", "ngabbs.com")
 
     private const val PREFS = "nga_prefs"
     private const val KEY_BASE = "base_domain"
