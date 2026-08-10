@@ -22,7 +22,7 @@ import com.ngalite.app.data.Forum
 /**
  * 全局缓存 assets/icons/ 目录下的文件名集合，避免每个图标项都扫描目录。
  */
-internal val ForumIconBackground = Color(0xFFF3F3F3)
+internal val ForumIconBackground = Color(0xFFE8E8EA)
 
 private val forumIconCache: Set<String> by lazy {
     try {
