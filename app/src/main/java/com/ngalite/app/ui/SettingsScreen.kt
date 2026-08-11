@@ -25,7 +25,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.AlertDialog
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.CookieStore
+import com.ngalite.app.data.HtmlShareConfig
 import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.launch
 
@@ -77,6 +80,13 @@ fun SettingsScreen(
     var cookieInput by remember { mutableStateOf(CookieStore.get()) }
     var logged by remember { mutableStateOf(CookieStore.isLogin()) }
     var loggedAccount by remember { mutableStateOf(CookieStore.getAccountName()) }
+
+    // ---- HTML 分享配置 ----
+    var shareProvider by remember { mutableStateOf(HtmlShareConfig.provider()) }
+    var showShareProviderMenu by remember { mutableStateOf(false) }
+    var htmltoCookie by remember { mutableStateOf(HtmlShareConfig.htmltoCookie()) }
+    var showHtmltoCookieDialog by remember { mutableStateOf(false) }
+    var htmltoCookieInput by remember { mutableStateOf(htmltoCookie) }
 
     fun refreshLoginState() {
         logged = CookieStore.isLogin()
@@ -313,6 +323,63 @@ fun SettingsScreen(
             Spacer(Modifier.height(20.dp))
 
             // ==========================================
+            // HTML 分享
+            // ==========================================
+            SectionTitle(text = "HTML 分享")
+
+            Spacer(Modifier.height(8.dp))
+
+            SettingsCard {
+                Box {
+                    SettingsRow(
+                        icon = Icons.Default.Link,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = "分享服务",
+                        subtitle = when (shareProvider) {
+                            HtmlShareConfig.Provider.PAD -> "配置1 · pad.genwebapp.com"
+                            HtmlShareConfig.Provider.HTMLTO -> "配置2 · htmlto.link"
+                        },
+                        onClick = { showShareProviderMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showShareProviderMenu,
+                        onDismissRequest = { showShareProviderMenu = false }
+                    ) {
+                        HtmlShareConfig.Provider.entries.forEach { provider ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        provider.displayName,
+                                        fontWeight = if (provider == shareProvider) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    if (provider != shareProvider) {
+                                        shareProvider = provider
+                                        HtmlShareConfig.setProvider(provider)
+                                    }
+                                    showShareProviderMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Key,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    title = "htmlto.link Cookie",
+                    subtitle = if (htmltoCookie.isBlank())
+                        "可选 · 配置后链接有效期由 1 天提升至 3 天"
+                    else
+                        "已配置 · 分享链接有效期 3 天",
+                    onClick = { showHtmltoCookieDialog = true }
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ==========================================
             // 关于
             // ==========================================
             SectionTitle(text = "关于")
@@ -403,6 +470,42 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCookieDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // ---- htmlto.link Cookie 配置对话框 ----
+    if (showHtmltoCookieDialog) {
+        AlertDialog(
+            onDismissRequest = { showHtmltoCookieDialog = false },
+            title = { Text("htmlto.link Cookie", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Text(
+                        "可选配置。粘贴 htmlto.link 网站的 Cookie 后，生成的分享链接有效期由 1 天提升至 3 天；不配置则默认 1 天。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = htmltoCookieInput,
+                        onValueChange = { htmltoCookieInput = it },
+                        label = { Text("Cookie 字符串") },
+                        singleLine = false,
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    HtmlShareConfig.setHtmltoCookie(htmltoCookieInput)
+                    htmltoCookie = HtmlShareConfig.htmltoCookie()
+                    showHtmltoCookieDialog = false
+                }) { Text("保存", fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHtmltoCookieDialog = false }) { Text("取消") }
             }
         )
     }

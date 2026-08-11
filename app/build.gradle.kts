@@ -19,8 +19,8 @@ android {
         applicationId = "com.ngalite.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 51
-        versionName = "1.91"
+        versionCode = 52
+        versionName = "1.92"
     }
 
     signingConfigs {

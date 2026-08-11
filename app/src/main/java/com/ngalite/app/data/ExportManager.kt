@@ -373,6 +373,47 @@ object ExportManager {
         }
     }
 
+    // ---- HTML To Link 分享（配置2） ----
+
+    private const val HTMLTO_PUSH_URL = "https://htmlto.link/api/shares"
+    private const val HTMLTO_TEMPLATE_ID = "memo"
+    private const val HTMLTO_THEME_CLASS = "bright-mode"
+
+    /**
+     * 将帖子 Markdown 上传到 htmlto.link，生成可访问的分享链接。
+     * content 支持 Markdown；请求可选携带 htmlto.link 站点 Cookie，
+     * 配置后链接有效期由 1 天提升到 3 天。成功以响应中的 success 为准，返回 url 字段。
+     */
+    suspend fun uploadMarkdownToHtmltoLink(title: String, markdown: String): String =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+                .put("content", markdown)
+                .put("templateId", HTMLTO_TEMPLATE_ID)
+                .put("themeClass", HTMLTO_THEME_CLASS)
+                .put("title", title)
+                .put("customCss", "")
+                .toString()
+            val builder = Request.Builder()
+                .url(HTMLTO_PUSH_URL)
+                .header("User-Agent", NgaApi.UA)
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            HtmlShareConfig.htmltoCookie().takeIf { it.isNotBlank() }?.let { cookie ->
+                builder.header("Cookie", cookie)
+            }
+            imageClient.newCall(builder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code}")
+                val responseBody = resp.body?.string() ?: throw RuntimeException("响应为空")
+                val json = JSONObject(responseBody)
+                if (!json.optBoolean("success", false)) {
+                    val reason = json.optString("message")
+                        .ifBlank { json.optString("error") }
+                        .ifBlank { "服务端返回失败" }
+                    throw RuntimeException(reason)
+                }
+                json.optString("url").ifBlank { throw RuntimeException("响应缺少 url") }
+            }
+        }
+
     // ---- 保存到存储 ----
 
     fun saveHtmlToDownloads(context: Context, displayName: String, htmlContent: String): String {

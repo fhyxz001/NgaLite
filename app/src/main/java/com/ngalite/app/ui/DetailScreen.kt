@@ -85,6 +85,7 @@ import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.ContentNode
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.ExportManager
+import com.ngalite.app.data.HtmlShareConfig
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
@@ -301,9 +302,18 @@ class DetailViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
-                val inlined = ExportManager.inlineImagesInHtml(html, cookie)
-                val link = ExportManager.uploadHtmlToPad(inlined)
+                // 按设置页选择的分享服务生成链接：配置1 pad / 配置2 htmlto.link
+                val link = when (HtmlShareConfig.provider()) {
+                    HtmlShareConfig.Provider.PAD -> {
+                        val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                        val inlined = ExportManager.inlineImagesInHtml(html, cookie)
+                        ExportManager.uploadHtmlToPad(inlined)
+                    }
+                    HtmlShareConfig.Provider.HTMLTO -> {
+                        val markdown = ExportManager.convertToMarkdown(content)
+                        ExportManager.uploadMarkdownToHtmltoLink(content.title, markdown)
+                    }
+                }
                 // 分享文本带帖子标题，便于接收方直接知道内容
                 val shareText = if (content.title.isBlank()) link else "${content.title} $link"
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
