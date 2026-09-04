@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AddToHomeScreen
@@ -330,7 +329,8 @@ private fun ForumGridItem(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                modifier = Modifier.size(88.dp).clip(CircleShape).background(ForumIconBackground),
+                // 板块图标按钮：正方形而非圆形
+                modifier = Modifier.size(88.dp).clip(RoundedCornerShape(18.dp)).background(ForumIconBackground),
                 contentAlignment = Alignment.Center
             ) {
                 ForumIcon(forum = forum, size = 72.dp)

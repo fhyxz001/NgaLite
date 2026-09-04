@@ -3,7 +3,7 @@ package com.ngalite.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +22,7 @@ import com.ngalite.app.data.Forum
 /**
  * 全局缓存 assets/icons/ 目录下的文件名集合，避免每个图标项都扫描目录。
  */
-internal val ForumIconBackground = Color(0xFFE8E8EA)
+internal val ForumIconBackground = Color.White
 
 private val forumIconCache: Set<String> by lazy {
     try {
@@ -44,7 +44,7 @@ fun ForumIcon(
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(14.dp))
             .background(ForumIconBackground),
         contentAlignment = Alignment.Center
     ) {

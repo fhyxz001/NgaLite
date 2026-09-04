@@ -34,10 +34,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Html
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
@@ -252,13 +251,13 @@ class DetailViewModel : ViewModel() {
             ExportManager.ExportContent(success.title, allPosts, postUrl())
         }
 
-    /** 复制 Markdown 到剪贴板 */
-    fun exportMarkdown(context: Context): String? {
+    /** 复制纯文本到剪贴板（不再使用 Markdown 格式） */
+    fun exportPlainText(context: Context): String? {
         val content = exportContent() ?: return null
-        val markdown = ExportManager.convertToMarkdown(content)
+        val text = ExportManager.convertToPlainText(content)
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子", markdown))
-        return markdown
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子", text))
+        return text
     }
 
     /** 导出 HTML 到下载目录 */
@@ -339,7 +338,8 @@ class DetailViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                // 图片导出启用"倒 T 型"分享预览区，微信预览时优先显示中部大标题
+                val html = ExportManager.buildExportHtml(context, content, includeAttribution, withSharePreview = true)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val bitmap = ExportManager.renderHtmlToBitmap(context, inlined)
                 try {
@@ -355,27 +355,6 @@ class DetailViewModel : ViewModel() {
                 onResult(false, "图片导出失败: ${e.message}")
             }
         }
-    }
-
-    /** 通过系统打印对话框导出 PDF */
-    fun exportPdf(context: Context, includeAttribution: Boolean): String? {
-        val content = exportContent() ?: return null
-        viewModelScope.launch {
-            try {
-                val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
-                val inlined = ExportManager.inlineImagesInHtml(html, cookie)
-                val jobName = ExportManager.buildFileName(content.title, "pdf")
-                withContext(
-                    Dispatchers.Main
-                ) {
-                    ExportManager.printPdf(context, jobName, inlined)
-                }
-            } catch (e: Exception) {
-                // 打印框架已接管 UI，异常仅记录
-            }
-        }
-        return content.title
     }
 }
 
@@ -588,10 +567,11 @@ fun DetailScreen(
         ExportDialog(
             onDismiss = { if (!isExporting) showExportDialog = false },
             isExporting = isExporting,
-            onExportMarkdown = { includeAttribution ->
-                vm.exportMarkdown(context)
-                toast("Markdown 已复制到剪贴板")
-                showExportDialog = false
+            onCopyText = { includeAttribution ->
+                if (vm.exportPlainText(context) != null) {
+                    toast("纯文本已复制到剪贴板")
+                    showExportDialog = false
+                }
             },
             onExportHtml = { includeAttribution ->
                 if (!ensureStoragePermission()) return@ExportDialog
@@ -610,11 +590,6 @@ fun DetailScreen(
                     toast(msg)
                     if (success) showExportDialog = false
                 }
-            },
-            onExportPdf = { includeAttribution ->
-                vm.exportPdf(context, includeAttribution)
-                toast("已打开打印对话框，可选择保存为 PDF")
-                showExportDialog = false
             },
             onExportShareLink = { includeAttribution ->
                 isExporting = true
@@ -1165,40 +1140,36 @@ private fun InlineRichText(nodes: List<ContentNode>) {
 private fun ExportDialog(
     onDismiss: () -> Unit,
     isExporting: Boolean,
-    onExportMarkdown: (includeAttribution: Boolean) -> Unit,
+    onCopyText: (includeAttribution: Boolean) -> Unit,
     onExportHtml: (includeAttribution: Boolean) -> Unit,
     onExportImage: (includeAttribution: Boolean) -> Unit,
-    onExportPdf: (includeAttribution: Boolean) -> Unit,
     onExportShareLink: (includeAttribution: Boolean) -> Unit,
 ) {
     var includeAttribution by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("导出 / 分享") },
+        title = { Text("分享") },
         text = {
             Column {
                 Text(
-                    "选择导出格式，导出内容已适配手机屏幕展示",
+                    "选择分享方式",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
 
-                ExportOption(Icons.Default.Link, "分享链接", "上传 HTML 生成可访问链接") {
+                ExportOption(Icons.Default.Link, "分享链接", "上传生成可访问链接") {
                     onExportShareLink(includeAttribution)
                 }
-                ExportOption(Icons.Default.Code, "Markdown", "复制为 Markdown 文本") {
-                    onExportMarkdown(includeAttribution)
+                ExportOption(Icons.Default.ContentCopy, "复制文本", "将帖子正文复制为纯文本") {
+                    onCopyText(includeAttribution)
                 }
                 ExportOption(Icons.Default.Html, "HTML", "保存为 HTML 文件到下载目录") {
                     onExportHtml(includeAttribution)
                 }
                 ExportOption(Icons.Default.Image, "图片", "渲染为长图并保存到相册") {
                     onExportImage(includeAttribution)
-                }
-                ExportOption(Icons.Default.PictureAsPdf, "PDF", "通过系统打印对话框导出 PDF") {
-                    onExportPdf(includeAttribution)
                 }
 
                 Spacer(Modifier.height(8.dp))

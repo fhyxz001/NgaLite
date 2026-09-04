@@ -63,14 +63,45 @@ object ExportManager {
 
     // ---- HTML 构建 ----
 
-    fun buildExportHtml(context: Context, content: ExportContent, includeAttribution: Boolean): String {
+    fun buildExportHtml(
+        context: Context,
+        content: ExportContent,
+        includeAttribution: Boolean,
+        withSharePreview: Boolean = false,
+    ): String {
         val template = context.assets.open(TEMPLATE_ASSET).use { stream ->
             stream.bufferedReader().use { it.readText() }
         }
-        return renderTemplate(template, content, includeAttribution)
+        return renderTemplate(template, content, includeAttribution, withSharePreview)
     }
 
-    private fun renderTemplate(template: String, content: ExportContent, includeAttribution: Boolean): String {
+    /**
+     * 构建"倒 T 型"分享预览区（仅在导出图片时启用）：
+     * 顶部 0~33% 放极简提示，中部承载大字号标题，底部放弱化装饰，便于微信预览显示中部标题。
+     */
+    private fun buildSharePreviewHtml(title: String): String {
+        val safeTitle = escapeHtml(title).ifBlank { "NGA 帖子" }
+        return """
+            <div class="share-preview">
+                <div class="preview-top">
+                    <span class="preview-top-hint"><span class="down-arrow">▼</span> 展开本帖正文</span>
+                </div>
+                <div class="preview-hero">
+                    <span class="preview-title">$safeTitle</span>
+                </div>
+                <div class="preview-bottom">
+                    <span class="preview-bottom-decor">NGA 原帖 · 长按图片可查看全文详情</span>
+                </div>
+            </div>
+        """.trimIndent()
+    }
+
+    private fun renderTemplate(
+        template: String,
+        content: ExportContent,
+        includeAttribution: Boolean,
+        withSharePreview: Boolean = false,
+    ): String {
         // 区分主楼和回复：主楼完整渲染，回复合并为紧凑格式
         val mainPost = content.posts.firstOrNull()
         val replies = content.posts.drop(1)
@@ -82,7 +113,11 @@ object ExportManager {
             SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         val attributionClass = if (includeAttribution) "export-credit" else "export-credit is-hidden"
         val qrCodeHtml = buildQrCodeHtml(content.url)
+        val previewHeaderHtml = if (withSharePreview) buildSharePreviewHtml(content.title) else ""
+        val previewBodyClass = if (withSharePreview) "has-share-preview" else ""
         return template
+            .replace("{{previewClass}}", previewBodyClass)
+            .replace("{{previewHeaderHtml}}", previewHeaderHtml)
             .replace("{{title}}", escapeHtml(content.title))
             .replace("{{mainPostHtml}}", mainPostHtml)
             .replace("{{repliesHtml}}", repliesHtml)
@@ -233,6 +268,60 @@ object ExportManager {
         return sb.toString().trimEnd()
     }
 
+    /** 生成纯文本（用于复制文本），不含任何 Markdown 标记 */
+    fun convertToPlainText(content: ExportContent): String {
+        val sb = StringBuilder()
+        if (content.title.isNotBlank()) {
+            sb.append(content.title).append("\n\n")
+        }
+
+        val mainPost = content.posts.firstOrNull()
+        val replies = content.posts.drop(1)
+
+        if (mainPost != null) {
+            val likesStr = if (mainPost.likes != "0") " 赞 ${mainPost.likes} " else " "
+            sb.append(mainPost.floor).append(" ")
+                .append(mainPost.author).append("（").append(mainPost.date).append(likesStr).append("）\n\n")
+            mainPost.contentNodes.forEach { node ->
+                appendNodeToPlainText(sb, node)
+                sb.append("\n")
+            }
+        }
+
+        if (replies.isNotEmpty()) {
+            sb.append("回复\n")
+            replies.forEachIndexed { index, post ->
+                val textContent = post.contentNodes.mapNotNull { node ->
+                    when (node) {
+                        is ContentNode.Text -> node.text.trim().takeIf { it.isNotBlank() }
+                        is ContentNode.Quote -> "「${node.content.trim()}」"
+                        is ContentNode.Image -> "[图片]"
+                        is ContentNode.Emoji -> "[表情]"
+                    }
+                }.joinToString("")
+                sb.append(index + 1).append("# ").append(textContent).append("\n")
+            }
+        }
+        return sb.toString().trimEnd()
+    }
+
+    private fun appendNodeToPlainText(sb: StringBuilder, node: ContentNode) {
+        when (node) {
+            is ContentNode.Text -> {
+                if (node.text.isNotBlank()) sb.append(node.text.trim())
+            }
+            is ContentNode.Image -> {
+                sb.append("[图片]")
+            }
+            is ContentNode.Quote -> {
+                sb.append("「").append(node.content.trim()).append("」")
+            }
+            is ContentNode.Emoji -> {
+                sb.append("[表情]")
+            }
+        }
+    }
+
     private fun appendNodeToMarkdown(sb: StringBuilder, node: ContentNode) {
         when (node) {
             is ContentNode.Text -> {
@@ -376,8 +465,23 @@ object ExportManager {
     // ---- HTML To Link 分享（配置2） ----
 
     private const val HTMLTO_PUSH_URL = "https://htmlto.link/api/shares"
-    private const val HTMLTO_TEMPLATE_ID = "memo"
-    private const val HTMLTO_THEME_CLASS = "bright-mode"
+    private const val HTMLTO_TEMPLATE_ID = "plain"
+
+    /**
+     * 与 App 导出页一致的暖色羊皮纸风格 CSS，覆盖 htmlto.link 默认模板，
+     * 使分享页与 App 内文章的视觉观感一致（米黄底、深色正文、金色引用块）。
+     */
+    private const val HTMLTO_CUSTOM_CSS =
+        "body{background:#FFF8E7;color:#1f2937;font-family:'PingFang SC','Helvetica Neue',STHeiti,'Microsoft Yahei',sans-serif;line-height:1.8;}" +
+            "h1,h2,h3,h4{color:#1a1a1a;font-weight:700;}" +
+            "a{color:#8B6914;}" +
+            "blockquote{margin:10px 0;padding:10px 12px;border-left:3px solid #D4B860;background:#FFFAEC;border-radius:6px;color:#6B5A30;}" +
+            "code{background:#FFF3D6;border-radius:4px;padding:2px 6px;}" +
+            "pre{background:#FFF3D6;border:1px solid #F0E0B8;border-radius:8px;padding:12px;}" +
+            "img{max-width:100%;border-radius:8px;}" +
+            "hr{border:none;border-top:1px solid #E8D8B0;}" +
+            "table{border-collapse:collapse;}" +
+            "th,td{border:1px solid #F0E0B8;padding:6px 10px;}"
 
     /**
      * 将帖子 Markdown 上传到 htmlto.link，生成可访问的分享链接。
@@ -389,9 +493,8 @@ object ExportManager {
             val body = JSONObject()
                 .put("content", markdown)
                 .put("templateId", HTMLTO_TEMPLATE_ID)
-                .put("themeClass", HTMLTO_THEME_CLASS)
                 .put("title", title)
-                .put("customCss", "")
+                .put("customCss", HTMLTO_CUSTOM_CSS)
                 .toString()
             val builder = Request.Builder()
                 .url(HTMLTO_PUSH_URL)

@@ -37,6 +37,71 @@
             font-weight: 700;
             color: #1a1a1a;
         }
+        /* 分享预览区（倒 T 型）：顶部极简提示 / 中部大字标题 / 底部弱化装饰 */
+        .share-preview {
+            display: flex;
+            flex-direction: column;
+            margin: 0 0 20px;
+            min-height: 420px;
+            overflow: hidden;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #1F2937 0%, #2B1B0E 78%, #17120C 100%);
+            color: #ffffff;
+        }
+        .share-preview.is-hidden {
+            display: none !important;
+        }
+        .preview-top {
+            flex: 0 0 auto;
+            padding: 14px 18px 6px;
+            text-align: center;
+        }
+        .preview-top-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            line-height: 1;
+            letter-spacing: 4px;
+            color: rgba(255, 255, 255, 0.55);
+        }
+        .preview-top-hint .down-arrow {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.75);
+        }
+        .preview-hero {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px 30px 22px;
+            text-align: center;
+        }
+        .preview-title {
+            display: block;
+            max-width: 100%;
+            font-size: 34px;
+            line-height: 1.25;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #FFF3D6;
+            text-align: center;
+            word-break: break-word;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+        }
+        .preview-bottom {
+            flex: 0 0 auto;
+            padding: 6px 18px 16px;
+            text-align: center;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.12));
+        }
+        .preview-bottom-decor {
+            display: inline-block;
+            font-size: 12px;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.45);
+            letter-spacing: 2px;
+        }
         /* 主楼卡片 */
         .post-main {
             padding: 16px;
@@ -228,8 +293,9 @@
         }
     </style>
 </head>
-<body>
+<body class="{{previewClass}}">
     <main class="page">
+        {{previewHeaderHtml}}
         <h1 class="title">{{title}}</h1>
         {{mainPostHtml}}
         {{repliesHtml}}

@@ -474,6 +474,7 @@ fun SettingsScreen(
         )
     }
 
+    // ---- 妫€鏌ユ洿鏂扮粨鏋滃璇濇 ----
     // ---- htmlto.link Cookie 配置对话框 ----
     if (showHtmltoCookieDialog) {
         AlertDialog(
@@ -510,7 +511,6 @@ fun SettingsScreen(
         )
     }
 
-    // ---- 妫€鏌ユ洿鏂扮粨鏋滃璇濇 ----
     updateResult?.let { result ->
         AlertDialog(
             onDismissRequest = { updateResult = null },
