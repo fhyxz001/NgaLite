@@ -399,7 +399,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     coil.compose.AsyncImage(
-                        model = "file:///android_asset/logo.jpg",
+                        model = "file:///android_asset/logo.png",
                         contentDescription = "NgaLite",
                         modifier = Modifier
                             .size(72.dp)
