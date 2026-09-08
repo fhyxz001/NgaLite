@@ -11,30 +11,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AddToHomeScreen
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -155,63 +154,87 @@ private fun CommunityContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp)
+            .background(ForumColors.Page)
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
     ) {
-        Column(Modifier.padding(horizontal = 20.dp)) {
+        // 顶部白底区块：标题 + 论坛风格搜索框
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ForumColors.Surface)
+                .padding(horizontal = 14.dp)
+        ) {
+            Text(
+                "社区",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 12.dp, bottom = 10.dp)
+            )
             TextField(
                 value = state.query,
                 onValueChange = onQueryChange,
-                placeholder = { Text("\u641c\u7d22\u7248\u5757") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                placeholder = {
+                    Text(
+                        "搜索板块",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ForumColors.Meta
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = ForumColors.Meta
+                    )
+                },
                 trailingIcon = if (state.query.isNotEmpty()) {
                     {
                         IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "\u6e05\u7a7a\u641c\u7d22")
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "清空搜索",
+                                modifier = Modifier.size(18.dp),
+                                tint = ForumColors.Meta
+                            )
                         }
                     }
                 } else null,
                 singleLine = true,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                shape = MaterialTheme.shapes.large,
+                shape = RoundedCornerShape(4.dp),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                    unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                    focusedContainerColor = ForumColors.QuoteBg,
+                    unfocusedContainerColor = ForumColors.QuoteBg,
+                    disabledContainerColor = ForumColors.QuoteBg,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(12.dp))
         }
 
-        Spacer(Modifier.height(12.dp))
         if (state.query.isNotBlank()) {
-            ForumGrid(
+            ForumList(
                 forums = state.searchResults,
-                emptyMessage = "\u6ca1\u6709\u627e\u5230\u76f8\u5173\u7248\u5757",
+                emptyMessage = "没有找到相关板块",
                 onForumClick = onForumClick,
                 onForumLongClick = onForumLongClick,
                 modifier = Modifier.weight(1f)
             )
         } else {
-            CategoryPills(
+            CategoryTabs(
                 categories = state.categories,
                 selectedCategory = state.selectedCategory,
                 onCategoryClick = onCategoryClick
             )
-            Spacer(Modifier.height(8.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            )
-            Spacer(Modifier.height(8.dp))
-            ForumGrid(
+            ForumList(
                 forums = state.selectedCategory.forums,
-                emptyMessage = "\u8fd9\u91cc\u8fd8\u6ca1\u6709\u6536\u85cf\u7684\u7248\u5757\n\u70b9\u51fb\u661f\u6807\u5c06\u5b83\u4eec\u6dfb\u52a0\u5230\u6b64\u5904",
+                emptyMessage = "这里还没有收藏的板块\n长按板块图标可添加到桌面",
                 onForumClick = onForumClick,
                 onForumLongClick = onForumLongClick,
                 modifier = Modifier.weight(1f)
@@ -220,78 +243,80 @@ private fun CommunityContent(
     }
 }
 
+/** 分类标签：论坛风格下划线选中态，白底一栏 */
 @Composable
-private fun CategoryPills(
+private fun CategoryTabs(
     categories: List<ForumCategory>,
     selectedCategory: ForumCategory,
     onCategoryClick: (ForumCategory) -> Unit
 ) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(categories, key = { "category_${it.name}" }) { category ->
-            val selected = category.name == selectedCategory.name
-            Box(
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.large)
-                    .background(
-                        if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
-                        } else {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.42f)
-                        }
+    Column(Modifier.fillMaxWidth().background(ForumColors.Surface)) {
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 6.dp)
+        ) {
+            items(categories, key = { "category_${it.name}" }) { category ->
+                val selected = category.name == selectedCategory.name
+                Column(
+                    modifier = Modifier
+                        .clickable { onCategoryClick(category) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = category.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) ForumColors.Accent else ForumColors.Meta,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    .clickable { onCategoryClick(category) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = category.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        Modifier
+                            .width(18.dp)
+                            .height(2.dp)
+                            .background(if (selected) ForumColors.Accent else Color.Transparent)
+                    )
+                }
             }
         }
+        HorizontalDivider(color = ForumColors.Divider, thickness = 1.dp)
     }
 }
 
+/** 板块列表：图标 + 名称/简介 + 右箭头，行间发丝线 */
 @Composable
-private fun ForumGrid(
+private fun ForumList(
     forums: List<Forum>,
     emptyMessage: String,
     onForumClick: (Forum) -> Unit,
     onForumLongClick: (Forum) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        if (forums.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-                Text(emptyMessage, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 96.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(forums, key = { "forum_${it.fid}" }) { forum ->
-                    ForumGridItem(
-                        forum = forum,
-                        onClick = { onForumClick(forum) },
-                        onLongClick = { onForumLongClick(forum) }
-                    )
-                }
+    if (forums.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxSize().padding(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                emptyMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ForumColors.Meta,
+                textAlign = TextAlign.Center
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)
+        ) {
+            items(forums, key = { "forum_${it.fid}" }) { forum ->
+                ForumRow(
+                    forum = forum,
+                    onClick = { onForumClick(forum) },
+                    onLongClick = { onForumLongClick(forum) }
+                )
             }
         }
     }
@@ -299,52 +324,62 @@ private fun ForumGrid(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ForumGridItem(
+private fun ForumRow(
     forum: Forum,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    Card(
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isPressed) ForumColors.QuoteBg else ForumColors.Surface)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = LocalIndication.current,
                 onClick = onClick,
                 onLongClick = onLongClick
-            ),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isPressed) MaterialTheme.colorScheme.surfaceVariant
-                             else MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+            )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                // 板块图标按钮：正方形而非圆形
-                modifier = Modifier.size(88.dp).clip(RoundedCornerShape(18.dp)).background(ForumIconBackground),
-                contentAlignment = Alignment.Center
-            ) {
-                ForumIcon(forum = forum, size = 72.dp)
-            }
-            Spacer(Modifier.height(10.dp))
+            ForumIcon(forum = forum, size = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
                     text = forum.name,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.heightIn(min = 32.dp)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (forum.description.isNotBlank()) {
+                    Text(
+                        text = forum.description,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ForumColors.Meta,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = ForumColors.Floor,
+                modifier = Modifier.size(18.dp)
+            )
         }
+        HorizontalDivider(
+            color = ForumColors.Divider,
+            thickness = 1.dp,
+            modifier = Modifier.padding(start = 66.dp)
+        )
     }
 }

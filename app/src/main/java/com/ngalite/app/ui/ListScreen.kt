@@ -1,5 +1,6 @@
 package com.ngalite.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -39,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,7 +57,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -64,8 +64,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -386,16 +384,17 @@ fun ForumThreadsScreen(
     }
 
     Scaffold(
+        containerColor = ForumColors.Page,
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
-        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
+        val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp
         when (val s = state) {
             is ListUiState.Loading -> Box(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.surface),
+                    .background(ForumColors.Page),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -406,7 +405,7 @@ fun ForumThreadsScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.surface),
+                    .background(ForumColors.Page),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -426,7 +425,7 @@ fun ForumThreadsScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.surface),
+                    .background(ForumColors.Page),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -447,95 +446,96 @@ fun ForumThreadsScreen(
 
             is ListUiState.Success -> {
                 if (displayMode == DisplayMode.TEXT) {
-                    LazyColumn(
-                        state = listState,
+                    // 论坛风格：固定板块栏 + 整屏发丝线分隔的信息行
+                    Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
-                            .background(Color(0xFFF3F3F3)),
-                        contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = topSpacing + 12.dp,
-                            bottom = 12.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(top = topSpacing)
+                            .background(ForumColors.Page)
                     ) {
-                        item(key = "header") {
-                            ListHeader(
-                                forumName = currentForum.name,
-                                isFavorite = isFavorite,
-                                displayMode = displayMode,
-                                onBack = onBack,
-                                onToggleMode = {
-                                    displayMode = DisplayMode.WATERFALL
-                                    DisplayModeStore.setMode(fid, DisplayMode.WATERFALL)
-                                },
-                                onToggleFavorite = {
-                                    FavoriteStore.toggle(currentForum.fid)
-                                    isFavorite = FavoriteStore.isFavorite(currentForum.fid)
-                                }
-                            )
-                        }
-
-                        items(s.topics, key = { it.tid }) { topic ->
-                            TopicItem(
-                                topic = topic,
-                                onClick = { onTopicClick(topic.tid) }
-                            )
-                        }
-
-                        if (s.topics.isEmpty()) {
-                            item(key = "empty") {
-                                Text(
-                                    "该板块暂无帖子",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 48.dp),
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        ListHeader(
+                            forumName = currentForum.name,
+                            isFavorite = isFavorite,
+                            displayMode = displayMode,
+                            onBack = onBack,
+                            onToggleMode = {
+                                displayMode = DisplayMode.WATERFALL
+                                DisplayModeStore.setMode(fid, DisplayMode.WATERFALL)
+                            },
+                            onToggleFavorite = {
+                                FavoriteStore.toggle(currentForum.fid)
+                                isFavorite = FavoriteStore.isFavorite(currentForum.fid)
                             }
-                        }
+                        )
 
-                        if (s.isLoadingMore) {
-                            item(key = "loading_more") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .background(ForumColors.Page),
+                            contentPadding = PaddingValues(bottom = 12.dp)
+                        ) {
+                            if (s.topics.isNotEmpty()) {
+                                // 表头：论坛列表的列名，强化"信息表"观感
+                                item(key = "column_header") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(ForumColors.QuoteBg)
+                                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "主题",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ForumColors.Meta,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            "回复",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ForumColors.Meta
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        if (!s.hasMore) {
-                            item(key = "no_more") {
-                                Text(
-                                    "没有更多了",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.outline
+                            if (s.topics.isEmpty()) {
+                                item(key = "empty") {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .background(ForumColors.Surface)
+                                    ) { ListStatusHint("该板块暂无帖子") }
+                                }
+                            }
+
+                            items(s.topics, key = { it.tid }) { topic ->
+                                TopicItem(
+                                    topic = topic,
+                                    showDivider = true,
+                                    onClick = { onTopicClick(topic.tid) }
                                 )
                             }
-                        }
 
-                        s.loadMoreError?.let { message ->
-                            item(key = "load_more_error") {
-                                TextButton(
-                                    onClick = vm::loadMore,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("$message，点击重试")
+                            if (s.isLoadingMore) {
+                                item(key = "loading_more") { ListLoadingMore() }
+                            }
+
+                            if (!s.hasMore && s.topics.isNotEmpty()) {
+                                item(key = "no_more") { ListStatusHint("— 没有更多了 —") }
+                            }
+
+                            s.loadMoreError?.let { message ->
+                                item(key = "load_more_error") {
+                                    TextButton(
+                                        onClick = vm::loadMore,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("$message，点击重试")
+                                    }
                                 }
                             }
                         }
@@ -548,7 +548,7 @@ fun ForumThreadsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
-                            .background(Color(0xFFF5F6F8)),
+                            .background(ForumColors.Page),
                         contentPadding = PaddingValues(
                             start = 12.dp,
                             end = 12.dp,
@@ -585,45 +585,19 @@ fun ForumThreadsScreen(
 
                         if (s.topics.isEmpty()) {
                             item(key = "empty", span = StaggeredGridItemSpan.FullLine) {
-                                Text(
-                                    "该板块暂无帖子",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 48.dp),
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                ListStatusHint("该板块暂无帖子")
                             }
                         }
 
                         if (s.isLoadingMore) {
                             item(key = "loading_more", span = StaggeredGridItemSpan.FullLine) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                                ListLoadingMore()
                             }
                         }
 
-                        if (!s.hasMore) {
+                        if (!s.hasMore && s.topics.isNotEmpty()) {
                             item(key = "no_more", span = StaggeredGridItemSpan.FullLine) {
-                                Text(
-                                    "没有更多了",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                                ListStatusHint("— 没有更多了 —")
                             }
                         }
 
@@ -668,7 +642,38 @@ fun ForumThreadsScreen(
     }
 }
 
-/** 列表/瀑布流通用顶栏：返回、板块名、模式切换、收藏 */
+/** 列表状态提示：空列表 / 没有更多等 */
+@Composable
+private fun ListStatusHint(text: String, color: Color = ForumColors.Meta) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.labelMedium,
+        color = color
+    )
+}
+
+/** 加载更多指示器 */
+@Composable
+private fun ListLoadingMore() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(22.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/** 论坛风格顶栏：返回、板块名 + 副标题、模式切换、收藏（吸顶，底部一条发丝线） */
 @Composable
 private fun ListHeader(
     forumName: String,
@@ -678,113 +683,159 @@ private fun ListHeader(
     onToggleMode: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(ForumColors.Surface)
     ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回"
-                )
-            }
-        }
-        Text(
-            forumName,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        IconButton(onClick = onToggleMode) {
-            Icon(
-                imageVector = if (displayMode == DisplayMode.TEXT) Icons.Filled.GridView else Icons.AutoMirrored.Filled.ViewList,
-                contentDescription = if (displayMode == DisplayMode.TEXT) "切换瀑布流" else "切换列表",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = onToggleFavorite) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
-                contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopicItem(
-    topic: Topic,
-    onClick: () -> Unit
-) {
-    // 缓存热度计算结果，避免滚动时重复计算
-    val colorScheme = MaterialTheme.colorScheme
-    val (replies, badgeColor, badgeContainer) = remember(topic.replies, colorScheme) {
-        val count = topic.replies.toIntOrNull() ?: 0
-        val color = when {
-            count >= 100 -> colorScheme.error
-            count >= 30 -> colorScheme.tertiary
-            else -> colorScheme.secondary
-        }
-        val container = when {
-            count >= 100 -> colorScheme.errorContainer
-            count >= 30 -> colorScheme.tertiaryContainer
-            else -> colorScheme.secondaryContainer
-        }
-        Triple(count, color, container)
-    }
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    topic.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(badgeContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        if (replies > 0) topic.replies else "0",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = badgeColor
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = if (onBack != null) 2.dp else 14.dp,
+                    end = 4.dp,
+                    top = 4.dp,
+                    bottom = 4.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
-            if (topic.replyTime.isNotBlank()) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    topic.replyTime,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(top = 8.dp)
+                    forumName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    if (displayMode == DisplayMode.TEXT) "帖子列表 · 按最后回复排序" else "图文浏览模式",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ForumColors.Meta,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            IconButton(onClick = onToggleMode, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (displayMode == DisplayMode.TEXT) Icons.Filled.GridView else Icons.AutoMirrored.Filled.ViewList,
+                    contentDescription = if (displayMode == DisplayMode.TEXT) "切换图文模式" else "切换列表模式",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onToggleFavorite, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                    modifier = Modifier.size(20.dp),
+                    tint = if (isFavorite) ForumColors.OwnerText else ForumColors.Meta
+                )
+            }
+        }
+        HorizontalDivider(color = ForumColors.Divider, thickness = 1.dp)
+    }
+}
+
+/** 论坛风格帖子行：热度竖条 + 标题/作者/时间 + 右侧回复数列 */
+@Composable
+private fun TopicItem(
+    topic: Topic,
+    showDivider: Boolean,
+    onClick: () -> Unit
+) {
+    val replyCount = topic.replies.toIntOrNull() ?: 0
+    val isHot = replyCount >= 100
+    val isWarm = replyCount >= 30
+    val accent = when {
+        isHot -> ForumColors.Hot
+        isWarm -> ForumColors.OwnerText
+        else -> ForumColors.Divider
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(ForumColors.Surface)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 3.dp)
+                    .width(3.dp)
+                    .height(15.dp)
+                    .background(accent)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    topic.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(5.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        topic.author.ifBlank { "匿名" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ForumColors.Link,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (topic.replyTime.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            topic.replyTime,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ForumColors.Meta,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.padding(top = 1.dp)
+            ) {
+                Text(
+                    topic.replies.ifBlank { "0" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = when {
+                        isHot -> ForumColors.Hot
+                        isWarm -> ForumColors.OwnerText
+                        else -> ForumColors.Strong
+                    }
+                )
+                Text(
+                    "回复",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ForumColors.Floor
+                )
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(color = ForumColors.Divider, thickness = 1.dp)
         }
     }
 }
@@ -811,8 +862,9 @@ private fun WaterfallTopicItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = ForumColors.Surface),
+        border = BorderStroke(1.dp, ForumColors.Divider),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
     ) {
         Box(
@@ -867,11 +919,11 @@ private fun WaterfallTopicItem(
 /** 瀑布流无图帖子：放大的标题文字 + 回复数 + 时间 */
 @Composable
 private fun WaterfallTextCard(topic: Topic) {
-    // 基于 tid 哈希选取柔和背景色，增加视觉多样性
+    // 基于 tid 哈希选取柔和背景色，整体保持低饱和，接近论坛纸张质感
     val bgColor = remember(topic.tid) {
         val colors = listOf(
-            Color(0xFFF5F0FF), Color(0xFFF0F7FF), Color(0xFFFFF5F0),
-            Color(0xFFF0FFF5), Color(0xFFFFF0F5), Color(0xFFF0F0FF),
+            Color(0xFFF6F4EF), Color(0xFFF1F5F8), Color(0xFFF6F3F6),
+            Color(0xFFF1F6F2), Color(0xFFF7F4F3), Color(0xFFF2F4F8),
         )
         val hash = kotlin.math.abs(topic.tid.hashCode())
         colors[hash % colors.size]
@@ -881,13 +933,13 @@ private fun WaterfallTextCard(topic: Topic) {
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
-            .padding(16.dp),
+            .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // 标题文字放大展示
         Text(
             topic.title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 6,
@@ -905,7 +957,7 @@ private fun WaterfallTextCard(topic: Topic) {
                 Text(
                     "$replies 回复",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = if (replies >= 100) ForumColors.Hot else ForumColors.Meta
                 )
             } else {
                 Spacer(Modifier.width(0.dp))
@@ -913,8 +965,9 @@ private fun WaterfallTextCard(topic: Topic) {
             Text(
                 topic.replyTime,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                maxLines = 1
+                color = ForumColors.Meta,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

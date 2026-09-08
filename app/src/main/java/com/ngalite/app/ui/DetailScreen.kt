@@ -38,12 +38,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Html
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.automirrored.filled.NavigateBefore
-import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -69,7 +64,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -95,10 +89,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-
-/** 楼主徽标配色 */
-private val TopicOwnerBg = Color(0xFFE3F2FD)
-private val TopicOwnerText = Color(0xFF1565C0)
 
 sealed interface DetailUiState {
     data object Loading : DetailUiState
@@ -425,7 +415,7 @@ fun DetailScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = ForumColors.Page,
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
         val topSpacing = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp
@@ -435,7 +425,7 @@ fun DetailScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.background),
+                    .background(ForumColors.Page),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -448,7 +438,7 @@ fun DetailScreen(
                 Text(
                     "加载中…",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = ForumColors.Meta
                 )
             }
 
@@ -457,7 +447,7 @@ fun DetailScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(top = topSpacing)
-                    .background(MaterialTheme.colorScheme.background),
+                    .background(ForumColors.Page),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -470,7 +460,7 @@ fun DetailScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     s.message,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = ForumColors.Meta,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -487,14 +477,15 @@ fun DetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .background(MaterialTheme.colorScheme.background),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = topSpacing, bottom = 24.dp),
+                    .background(ForumColors.Page),
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = topSpacing, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 标题栏 + 统计信息
                 item {
                     DetailHeader(
                         title = s.title,
+                        forumName = s.forumName,
                         originalPost = s.originalPost,
                         comments = s.comments,
                         currentPage = s.currentPage,
@@ -506,26 +497,31 @@ fun DetailScreen(
                 // 主楼
                 s.originalPost?.let { post ->
                     item {
-                        OriginalPostCard(post) { images, index -> fullScreenState = images to index }
+                        FloorCard(
+                            post = post,
+                            isOwner = true,
+                            onImageClick = { images, index -> fullScreenState = images to index }
+                        )
                     }
                 }
 
                 // 回复区标题
                 if (s.comments.isNotEmpty()) {
                     item {
-                        Text(
+                        SectionBar(
                             text = if (s.currentPage == 1) "全部回复" else "第 ${s.currentPage} 页",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 0.dp)
+                            trailing = "${s.comments.size} 条"
                         )
                     }
                 }
 
                 // 回复列表
                 itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}-${post.author}" }) { _, post ->
-                    CommentCard(post) { images, index -> fullScreenState = images to index }
+                    FloorCard(
+                        post = post,
+                        isOwner = false,
+                        onImageClick = { images, index -> fullScreenState = images to index }
+                    )
                 }
 
                 // 分页栏
@@ -621,11 +617,12 @@ fun DetailScreen(
 }
 
 /**
- * 标题栏：返回按钮 + 标题 + 统计信息 + 分享按钮
+ * 论坛风格标题栏：白色区块 + 返回/板块/分享工具行 + 标题 + 统计信息
  */
 @Composable
 private fun DetailHeader(
     title: String,
+    forumName: String,
     originalPost: Post?,
     comments: List<Post>,
     currentPage: Int,
@@ -638,11 +635,14 @@ private fun DetailHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 4.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(ForumColors.Surface)
     ) {
-        // 顶栏：返回 + 分享
+        // 工具行：返回 + 板块名 + 分享
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
@@ -652,7 +652,20 @@ private fun DetailHeader(
                     modifier = Modifier.size(22.dp)
                 )
             }
-            Spacer(Modifier.weight(1f))
+            if (forumName.isNotBlank()) {
+                Text(
+                    forumName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ForumColors.Link,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 4.dp)
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
             IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
                 Icon(
                     Icons.Default.Share,
@@ -668,164 +681,172 @@ private fun DetailHeader(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-            maxLines = 3,
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 10.dp),
+            maxLines = 4,
             overflow = TextOverflow.Ellipsis
         )
 
         // 统计信息
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp),
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                "$totalPosts 帖",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "·",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-            Text(
-                "${comments.size} 回复",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (views > 0) {
-                Text(
-                    "·",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-                Text(
-                    "$views 浏览",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            StatChip("$totalPosts 层")
+            StatChip("${comments.size} 回复")
+            if (views > 0) StatChip("$views 浏览")
+            if (currentPage > 1) StatChip("第 $currentPage 页")
         }
     }
 }
 
-/**
- * 主楼卡片：用户名 + 楼主标签 + 正文 + 底部互动栏
- */
+/** 统计小标签：浅底 + 次要文字，论坛风格的计数条 */
 @Composable
-private fun OriginalPostCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+private fun StatChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(2.dp))
+            .background(ForumColors.QuoteBg)
+            .padding(horizontal = 7.dp, vertical = 3.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            // 用户信息行
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        post.author,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        post.date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // 楼主标签
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(TopicOwnerBg)
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        "楼主",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TopicOwnerText
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // 正文
-            PostContent(post.contentNodes, onImageClick)
-
-            // 底部互动栏
-            PostFooter(views = post.views)
-        }
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = ForumColors.Meta,
+            maxLines = 1
+        )
     }
 }
 
-/**
- * 回复卡片：仅保留回复正文内容
- */
+/** 区块标题条：左侧蓝色竖条 + 标题 + 右侧计数 */
 @Composable
-private fun CommentCard(post: Post, onImageClick: (List<String>, Int) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            // 正文
-            PostContent(post.contentNodes, onImageClick)
-        }
-    }
-}
-
-/**
- * 底部互动栏：浏览数
- */
-@Composable
-private fun PostFooter(views: String) {
-    val viewCount = views.toIntOrNull() ?: 0
-
+private fun SectionBar(text: String, trailing: String? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(start = 2.dp, end = 2.dp, top = 6.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // 浏览
-        if (viewCount > 0) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Visibility,
-                    contentDescription = "浏览",
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.outline
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "$viewCount",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(14.dp)
+                .background(ForumColors.Accent)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (trailing != null) {
+            Text(
+                trailing,
+                style = MaterialTheme.typography.labelSmall,
+                color = ForumColors.Meta
+            )
         }
     }
 }
 
 /**
- * 底部分页栏：上一页 / 页码 / 下一页
+ * 论坛楼层卡片：作者 + 楼主徽标 + 楼层号，发丝线下方是正文
+ */
+@Composable
+private fun FloorCard(
+    post: Post,
+    isOwner: Boolean,
+    onImageClick: (List<String>, Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(ForumColors.Surface)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        // 楼层信息行：作者 + 楼主徽标 …… 楼层号
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    post.author.ifBlank { "匿名" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ForumColors.Link,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (isOwner) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(ForumColors.OwnerBg)
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            "楼主",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ForumColors.OwnerText
+                        )
+                    }
+                }
+            }
+            Text(
+                if (post.floor.startsWith("#")) post.floor else "#${post.floor}",
+                style = MaterialTheme.typography.labelSmall,
+                color = ForumColors.Floor,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        // 时间 + 浏览数
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                post.date,
+                style = MaterialTheme.typography.labelSmall,
+                color = ForumColors.Meta,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val viewCount = post.views.toIntOrNull() ?: 0
+            if (viewCount > 0) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "浏览 $viewCount",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ForumColors.Floor
+                )
+            }
+        }
+
+        HorizontalDivider(
+            color = ForumColors.Divider,
+            thickness = 1.dp,
+            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+        )
+
+        // 正文
+        PostContent(post.contentNodes, onImageClick)
+    }
+}
+
+/**
+ * 论坛风格分页栏：上一页 / 第 N 页 / 下一页
  */
 @Composable
 private fun DetailPager(
@@ -839,28 +860,13 @@ private fun DetailPager(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        // 上一页
-        IconButton(
-            onClick = onPrev,
-            enabled = hasPrev && !isLoading,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.NavigateBefore,
-                contentDescription = "上一页",
-                modifier = Modifier.size(22.dp),
-                tint = if (hasPrev && !isLoading)
-                    MaterialTheme.colorScheme.onSurface
-                else
-                    MaterialTheme.colorScheme.outlineVariant
-            )
-        }
+        PagerButton(label = "上一页", enabled = hasPrev && !isLoading, onClick = onPrev)
 
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(14.dp))
 
         // 页码 / 加载状态
         if (isLoading) {
@@ -869,39 +875,49 @@ private fun DetailPager(
                 strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
                 "加载中…",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = ForumColors.Meta
             )
         } else {
-            Text(
-                "$currentPage",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(ForumColors.Surface)
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
+            ) {
+                Text(
+                    "第 $currentPage 页",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
 
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(14.dp))
 
-        // 下一页
-        IconButton(
-            onClick = onNext,
-            enabled = hasNext && !isLoading,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.NavigateNext,
-                contentDescription = "下一页",
-                modifier = Modifier.size(22.dp),
-                tint = if (hasNext && !isLoading)
-                    MaterialTheme.colorScheme.onSurface
-                else
-                    MaterialTheme.colorScheme.outlineVariant
-            )
-        }
+        PagerButton(label = "下一页", enabled = hasNext && !isLoading, onClick = onNext)
+    }
+}
+
+/** 分页按钮：可用时为白底蓝字，不可用时为浅灰底 */
+@Composable
+private fun PagerButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(3.dp))
+            .background(if (enabled) ForumColors.Surface else ForumColors.QuoteBg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) ForumColors.Link else ForumColors.Floor
+        )
     }
 }
 
@@ -913,24 +929,24 @@ private fun EndMarker() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         HorizontalDivider(
-            modifier = Modifier.width(40.dp),
-            color = MaterialTheme.colorScheme.outlineVariant
+            modifier = Modifier.width(32.dp),
+            color = ForumColors.Divider
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         Text(
-            "没有更多了",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline
+            "本页没有更多楼层",
+            style = MaterialTheme.typography.labelSmall,
+            color = ForumColors.Floor
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         HorizontalDivider(
-            modifier = Modifier.width(40.dp),
-            color = MaterialTheme.colorScheme.outlineVariant
+            modifier = Modifier.width(32.dp),
+            color = ForumColors.Divider
         )
     }
 }
@@ -979,8 +995,8 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, I
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(ForumColors.QuoteBg)
                             .clickable { onImageClick(allImages, currentImageIndex) },
                         contentScale = ContentScale.FillWidth
                     )
@@ -991,28 +1007,27 @@ private fun PostContent(nodes: List<ContentNode>, onImageClick: (List<String>, I
                             .fillMaxWidth()
                             .height(IntrinsicSize.Max)
                             .padding(top = 10.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(ForumColors.QuoteBg)
                     ) {
                         Box(
                             modifier = Modifier
                                 .width(3.dp)
                                 .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.primary)
+                                .background(ForumColors.QuoteBar)
                         )
-                        Column(Modifier.padding(12.dp)) {
+                        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Text(
                                 "引用",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = ForumColors.Meta,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 group.content,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp)
+                                modifier = Modifier.padding(top = 3.dp)
                             )
                         }
                     }

@@ -9,28 +9,27 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -107,88 +106,82 @@ fun NavGraph(initialFid: String? = null) {
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                // 论坛风格底栏：白底 + 顶部发丝线 + 图标带文字，不做悬浮玻璃效果
+                Column(
+                    Modifier
                         .fillMaxWidth()
-                        .shadow(
-                            elevation = 14.dp,
-                            shape = RoundedCornerShape(28.dp),
-                            ambientColor = Color.Black.copy(alpha = 0.18f),
-                            spotColor = Color.Black.copy(alpha = 0.12f),
-                        )
-                        .clip(RoundedCornerShape(28.dp))
-                        .border(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.52f),
-                            shape = RoundedCornerShape(28.dp),
-                        ),
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 0.dp
+                        .background(ForumColors.Surface)
                 ) {
-                    NavigationBarItem(
-                        selected = currentRoute == Routes.COMMUNITY,
-                        onClick = {
-                            navSafe {
-                                nav.navigate(
-                                    Routes.COMMUNITY,
-                                    navOptions {
-                                        popUpTo(nav.graph.findStartDestination().id) {
-                                            saveState = true
+                    HorizontalDivider(color = ForumColors.Divider, thickness = 1.dp)
+                    NavigationBar(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = ForumColors.Surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 0.dp
+                    ) {
+                        NavigationBarItem(
+                            selected = currentRoute == Routes.COMMUNITY,
+                            onClick = {
+                                navSafe {
+                                    nav.navigate(
+                                        Routes.COMMUNITY,
+                                        navOptions {
+                                            popUpTo(nav.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                                    )
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Forum,
+                                    contentDescription = "社区"
                                 )
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Forum,
-                                contentDescription = "社区"
+                            },
+                            label = { Text("社区") },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = ForumColors.Accent,
+                                selectedTextColor = ForumColors.Accent,
+                                indicatorColor = ForumColors.AccentSoft,
+                                unselectedIconColor = ForumColors.Meta,
+                                unselectedTextColor = ForumColors.Meta
                             )
-                        },
-                        label = null,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == Routes.SETTINGS,
-                        onClick = {
-                            navSafe {
-                                nav.navigate(
-                                    Routes.SETTINGS,
-                                    navOptions {
-                                        popUpTo(nav.graph.findStartDestination().id) {
-                                            saveState = true
+                        NavigationBarItem(
+                            selected = currentRoute == Routes.SETTINGS,
+                            onClick = {
+                                navSafe {
+                                    nav.navigate(
+                                        Routes.SETTINGS,
+                                        navOptions {
+                                            popUpTo(nav.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                                    )
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "设置"
                                 )
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "设置"
+                            },
+                            label = { Text("设置") },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = ForumColors.Accent,
+                                selectedTextColor = ForumColors.Accent,
+                                indicatorColor = ForumColors.AccentSoft,
+                                unselectedIconColor = ForumColors.Meta,
+                                unselectedTextColor = ForumColors.Meta
                             )
-                        },
-                        label = null,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
+                    }
                 }
             }
         }
