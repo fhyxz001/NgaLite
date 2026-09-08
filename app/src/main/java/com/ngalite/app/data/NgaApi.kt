@@ -84,67 +84,29 @@ object NgaApi {
         }
     }
 
-    /** 用户名内存缓存：uid → 用户名（含服务端返回的 "UID:xxx" 占位名，避免重复请求） */
-    private val userNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** 用户信息内存缓存：uid → 用户名/头像（含服务端返回的 "UID:xxx" 占位名，避免重复请求） */
+    private val userCache = java.util.concurrent.ConcurrentHashMap<String, UserBrief>()
 
     /**
-     * 按 uid 查询用户名。
+     * 按 uid 查询用户名与头像短码。
      *
-     * 新版 read.php 不在楼层 HTML 里渲染作者名（`#postauthorN` 锚点为空，由页面脚本
+     * 新版 read.php 不在楼层 HTML 里渲染作者名与头像（`#postauthorN` 锚点为空，由页面脚本
      * 填充），页面内嵌用户表缺失时需按 uid 回查 `__lib=ucp&__act=get&lite=js`。
-     * 未登录时服务端会返回 "UID:xxxxx" 占位名，同样缓存；响应里确实没有用户名字段时
-     * 缓存空串作为负结果，避免同一 uid 反复请求（网络异常不缓存，下次仍可重试）。
+     * 未登录时服务端会返回 "UID:xxxxx" 占位名，同样缓存；响应里两个字段都为空时缓存空结果
+     * 作为负结果，避免同一 uid 反复请求（网络异常不缓存，下次仍可重试）。
      *
-     * @return 用户名；uid 非法、请求失败或响应中没有用户名字段时返回 null
+     * @return 用户信息；uid 非法、请求失败或响应无有效字段时返回 null
      */
-    fun fetchUserName(uid: String): String? {
+    fun fetchUserBrief(uid: String): UserBrief? {
         if (uid.isBlank() || !uid.all { it.isDigit() }) return null
-        userNameCache[uid]?.let { return it.ifBlank { null } }
+        userCache[uid]?.let { return it.takeIf { cached -> cached.name.isNotBlank() || cached.avatar.isNotBlank() } }
         val body = fetch("$BASE/nuke.php?__lib=ucp&__act=get&lite=js&uid=$uid")
-        val name = Regex(""""username"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-            .find(body)?.groupValues?.get(1)
-            ?.let { unescapeJson(it).trim() }
-            ?.takeIf { it.isNotEmpty() && it != "null" }
-            ?: run {
-                userNameCache[uid] = ""
-                return null
-            }
-        userNameCache[uid] = name
-        return name
-    }
-
-    /** 还原 JSON 字符串中的转义（\" \\ \uXXXX 等） */
-    private fun unescapeJson(raw: String): String {
-        if ('\\' !in raw) return raw
-        val sb = StringBuilder(raw.length)
-        var i = 0
-        while (i < raw.length) {
-            val c = raw[i]
-            if (c != '\\' || i + 1 >= raw.length) {
-                sb.append(c)
-                i++
-                continue
-            }
-            when (val next = raw[i + 1]) {
-                'n' -> sb.append('\n')
-                'r' -> sb.append('\r')
-                't' -> sb.append('\t')
-                'b' -> sb.append('\b')
-                'f' -> sb.append('\u000C')
-                'u' -> {
-                    val code = raw.substring(i + 2, minOf(i + 6, raw.length)).toIntOrNull(16)
-                    if (code != null) {
-                        sb.append(code.toChar())
-                        i += 4
-                    } else {
-                        sb.append(next)
-                    }
-                }
-                else -> sb.append(next)
-            }
-            i += 2
-        }
-        return sb.toString()
+        val brief = UserBrief(
+            name = JsonText.stringField(body, "username"),
+            avatar = JsonText.stringField(body, "avatar")
+        )
+        userCache[uid] = brief
+        return brief.takeIf { it.name.isNotBlank() || it.avatar.isNotBlank() }
     }
 
     /**

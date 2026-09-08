@@ -20,8 +20,17 @@ data class Post(
     val likes: String = "0",
     val views: String = "0",
     val contentNodes: List<ContentNode>,
-    /** 楼层作者 uid，用于用户名缺失时回查 */
-    val uid: String = ""
+    /** 楼层作者 uid，用于用户名/头像缺失时回查 */
+    val uid: String = "",
+    /** 楼层作者头像完整地址（NGA 头像短码已还原） */
+    val avatarUrl: String = ""
+)
+
+/** 用户简要信息：NGA 内嵌用户表 / 用户信息接口里的字段 */
+data class UserBrief(
+    val name: String = "",
+    /** 头像短码（如 `.a/12345_0.jpg`），需用 [NgaParser.avatarUrl] 还原为完整地址 */
+    val avatar: String = ""
 )
 
 /** 帖子正文中的内容节点 */

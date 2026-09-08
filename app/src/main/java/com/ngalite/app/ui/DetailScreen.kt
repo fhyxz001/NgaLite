@@ -2,6 +2,7 @@ package com.ngalite.app.ui
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Html
 import androidx.compose.material3.AlertDialog
@@ -64,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -82,6 +85,7 @@ import com.ngalite.app.data.HtmlShareConfig
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
+import com.ngalite.app.data.UserBrief
 import java.nio.charset.Charset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -220,8 +224,8 @@ class DetailViewModel : ViewModel() {
                     currentPage = page,
                     hasMore = result.posts.size >= PAGE_SIZE
                 )
-                // 正文先展示，作者名缺失时再按 uid 回查（不阻塞阅读）
-                resolveAuthorNames(myGen)
+                // 正文先展示，作者名/头像缺失时再按 uid 回查（不阻塞阅读）
+                resolveAuthorInfo(myGen)
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (t: Throwable) {
@@ -232,37 +236,47 @@ class DetailViewModel : ViewModel() {
     }
 
     /**
-     * 楼层作者名回查：新版 NGA 的 read.php 只在 HTML 里给出作者 uid（`#postauthorN` 锚点为空，
-     * 用户名由页面脚本填充），因此解析不到名字时按 uid 调接口补全，拿到后原地刷新状态。
+     * 楼层作者信息回查：新版 NGA 的 read.php 只在 HTML 里给出作者 uid（`#postauthorN` 锚点为空，
+     * 用户名与头像由页面脚本填充），因此解析不到名字或头像时按 uid 调接口补全，拿到后原地刷新状态。
      */
-    private fun resolveAuthorNames(generation: Long) {
+    private fun resolveAuthorInfo(generation: Long) {
         val snapshot = _state.value as? DetailUiState.Success ?: return
         val uids = (listOfNotNull(snapshot.originalPost) + snapshot.comments)
-            .filter { it.author.isBlank() && it.uid.isNotBlank() }
+            .filter { it.uid.isNotBlank() && (it.author.isBlank() || it.avatarUrl.isBlank()) }
             .map { it.uid }
             .distinct()
         if (uids.isEmpty()) return
 
         nameJob?.cancel()
         nameJob = viewModelScope.launch {
-            val resolved: Map<String, String> = withContext(Dispatchers.IO) {
+            val resolved: Map<String, UserBrief> = withContext(Dispatchers.IO) {
                 uids.map { uid ->
                     async {
                         nameSemaphore.withPermit {
-                            uid to runCatching { NgaApi.fetchUserName(uid) }.getOrNull()
+                            uid to runCatching { NgaApi.fetchUserBrief(uid) }.getOrNull()
                         }
                     }
                 }.awaitAll()
-                    .mapNotNull { (uid, name) -> name?.takeIf { it.isNotBlank() }?.let { uid to it } }
+                    .mapNotNull { (uid, brief) -> brief?.let { uid to it } }
                     .toMap()
             }
             if (resolved.isEmpty() || generation != loadGeneration) return@launch
             val current = _state.value as? DetailUiState.Success ?: return@launch
-            fun withName(post: Post): Post =
-                resolved[post.uid]?.let { post.copy(author = it) } ?: post
+            fun withInfo(post: Post): Post {
+                val brief = resolved[post.uid] ?: return post
+                var updated = post
+                if (updated.author.isBlank() && brief.name.isNotBlank()) {
+                    updated = updated.copy(author = brief.name)
+                }
+                if (updated.avatarUrl.isBlank() && brief.avatar.isNotBlank()) {
+                    val url = NgaParser.avatarUrl(brief.avatar, post.uid)
+                    if (url.isNotBlank()) updated = updated.copy(avatarUrl = url)
+                }
+                return updated
+            }
             _state.value = current.copy(
-                originalPost = current.originalPost?.let { withName(it) },
-                comments = current.comments.map { withName(it) }
+                originalPost = current.originalPost?.let { withInfo(it) },
+                comments = current.comments.map { withInfo(it) }
             )
         }
     }
@@ -821,74 +835,84 @@ private fun FloorCard(
             .background(ForumColors.Surface)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        // 楼层信息行：作者 + 楼主徽标 …… 楼层号
+        // 楼层信息行：头像 + 作者 + 楼主徽标 …… 楼层号
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    displayAuthor(post),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = ForumColors.Link,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (isOwner) {
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(ForumColors.OwnerBg)
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
+            FloorAvatar(
+                url = post.avatarUrl,
+                name = displayAuthor(post),
+                size = 38.dp
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "楼主",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
+                            displayAuthor(post),
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = ForumColors.OwnerText
+                            color = ForumColors.Link,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isOwner) {
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(ForumColors.OwnerBg)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    "楼主",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ForumColors.OwnerText
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        when {
+                            post.floor.isBlank() -> ""
+                            post.floor.startsWith("#") -> post.floor
+                            else -> "#${post.floor}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ForumColors.Floor,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(3.dp))
+
+                // 时间 + 浏览数
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        post.date,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ForumColors.Meta,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val viewCount = post.views.toIntOrNull() ?: 0
+                    if (viewCount > 0) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "浏览 $viewCount",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ForumColors.Floor
                         )
                     }
                 }
-            }
-            Text(
-                when {
-                    post.floor.isBlank() -> ""
-                    post.floor.startsWith("#") -> post.floor
-                    else -> "#${post.floor}"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = ForumColors.Floor,
-                maxLines = 1,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        // 时间 + 浏览数
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                post.date,
-                style = MaterialTheme.typography.labelSmall,
-                color = ForumColors.Meta,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val viewCount = post.views.toIntOrNull() ?: 0
-            if (viewCount > 0) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "浏览 $viewCount",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ForumColors.Floor
-                )
             }
         }
 
@@ -900,6 +924,67 @@ private fun FloorCard(
 
         // 正文
         PostContent(post.contentNodes, onImageClick)
+
+        // 底部互动栏：点赞数（NGA 的"推荐值"），为 0 时不占位
+        val likeCount = post.likes.toIntOrNull() ?: 0
+        if (likeCount > 0) {
+            HorizontalDivider(
+                color = ForumColors.Divider,
+                thickness = 1.dp,
+                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.ThumbUp,
+                    contentDescription = "点赞",
+                    tint = ForumColors.OwnerText,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    likeCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ForumColors.OwnerText
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 楼层头像：圆角方形；没有头像时用用户名首字占位，保证布局稳定。
+ */
+@Composable
+private fun FloorAvatar(url: String, name: String, size: Dp) {
+    val shape = RoundedCornerShape(4.dp)
+    if (url.isNotBlank()) {
+        AsyncImage(
+            model = url,
+            contentDescription = name,
+            modifier = Modifier
+                .size(size)
+                .clip(shape)
+                .background(ForumColors.QuoteBg),
+            contentScale = ContentScale.Crop,
+            error = ColorPainter(ForumColors.QuoteBg)
+        )
+        return
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(shape)
+            .background(ForumColors.QuoteBg)
+            .border(1.dp, ForumColors.Divider, shape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name.take(1).ifBlank { "?" },
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = ForumColors.Meta
+        )
     }
 }
 
