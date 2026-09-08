@@ -338,8 +338,7 @@ class DetailViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cookie = CookieStore.get()
-                // 图片导出启用"倒 T 型"分享预览区，微信预览时优先显示中部大标题
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution, withSharePreview = true)
+                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val bitmap = ExportManager.renderHtmlToBitmap(context, inlined)
                 try {
