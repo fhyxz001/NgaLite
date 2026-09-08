@@ -54,6 +54,9 @@ object ExportManager {
     private const val EXPORT_DIR = "NgaLite"
     private const val EXPORT_DPI = 200f
 
+    /** 导出页底色：与 App 内论坛风格页面底色一致，避免截图边缘出现白边 */
+    private const val EXPORT_PAGE_COLOR = "#EDEFF3"
+
     private val imageClient by lazy {
         NgaApi.sharedClientBuilder().build()
     }
@@ -170,30 +173,43 @@ object ExportManager {
         val likesHtml = if (post.likes != "0") {
             """<span class="post-likes">赞 ${escapeHtml(post.likes)}</span>"""
         } else ""
+        val author = escapeHtml(post.author.ifBlank { "匿名" })
         return """
         |<div class="post-main">
         |    <div class="post-head">
         |        <div class="post-head-left">
-        |            <span class="post-author">${escapeHtml(post.author)}</span>
+        |            <span class="post-author">$author</span>
         |            <span class="post-lz">楼主</span>
+        |            $likesHtml
         |        </div>
         |        <span class="post-date">${escapeHtml(post.date)}</span>
-        |        $likesHtml
         |    </div>
         |    <div class="post-content">$contentHtml</div>
         |</div>
         """.trimMargin()
     }
 
-    /** 回复渲染：每条回复按顺序标序号 "1#/2#/..." 后保留正文，图片与表情以真实图片展示 */
+    /** 回复渲染：论坛楼层样式，每条回复显示作者/时间/楼层号后保留正文 */
     private fun buildRepliesHtml(replies: List<Post>): String {
         val lines = replies.mapIndexed { index, post ->
             val body = post.contentNodes.joinToString("") { node -> replyNodeToHtml(node) }
-            """<div class="reply-line"><span class="reply-floor">${index + 1}# </span>$body</div>"""
+            val author = escapeHtml(post.author.ifBlank { "匿名" })
+            val date = escapeHtml(post.date)
+            val floor = escapeHtml(post.floor.ifBlank { "${index + 1}#" })
+            """
+            |<div class="reply-line">
+            |    <div class="reply-head">
+            |        <span class="reply-author">$author</span>
+            |        <span class="reply-date">$date</span>
+            |        <span class="reply-floor">$floor</span>
+            |    </div>
+            |    <div class="reply-body">$body</div>
+            |</div>
+            """.trimMargin()
         }.joinToString("\n")
         return """
         |<div class="replies-section">
-        |    <div class="replies-title">回复（${replies.size}条）</div>
+        |    <div class="replies-title"><span>全部回复</span><span>${replies.size} 条</span></div>
         |    $lines
         |</div>
         """.trimMargin()
@@ -468,20 +484,20 @@ object ExportManager {
     private const val HTMLTO_TEMPLATE_ID = "plain"
 
     /**
-     * 与 App 导出页一致的暖色羊皮纸风格 CSS，覆盖 htmlto.link 默认模板，
-     * 使分享页与 App 内文章的视觉观感一致（米黄底、深色正文、金色引用块）。
+     * 与 App 导出页一致的论坛（BBS）风格 CSS，覆盖 htmlto.link 默认模板，
+     * 使分享页与 App 内文章的视觉观感一致（浅灰页面底、白色内容块、发丝线、链接蓝）。
      */
     private const val HTMLTO_CUSTOM_CSS =
-        "body{background:#FFF8E7;color:#1f2937;font-family:'PingFang SC','Helvetica Neue',STHeiti,'Microsoft Yahei',sans-serif;line-height:1.8;}" +
-            "h1,h2,h3,h4{color:#1a1a1a;font-weight:700;}" +
-            "a{color:#8B6914;}" +
-            "blockquote{margin:10px 0;padding:10px 12px;border-left:3px solid #D4B860;background:#FFFAEC;border-radius:6px;color:#6B5A30;}" +
-            "code{background:#FFF3D6;border-radius:4px;padding:2px 6px;}" +
-            "pre{background:#FFF3D6;border:1px solid #F0E0B8;border-radius:8px;padding:12px;}" +
-            "img{max-width:100%;border-radius:8px;}" +
-            "hr{border:none;border-top:1px solid #E8D8B0;}" +
+        "body{background:#EDEFF3;color:#1F2733;font-family:'PingFang SC','Helvetica Neue',STHeiti,'Microsoft Yahei',sans-serif;line-height:1.85;}" +
+            "h1,h2,h3,h4{color:#1F2733;font-weight:700;}" +
+            "a{color:#1F6FB2;}" +
+            "blockquote{margin:10px 0;padding:8px 10px;border-left:3px solid #B9C6D3;background:#F5F7F9;border-radius:2px;color:#5A6572;}" +
+            "code{background:#F5F7F9;border-radius:2px;padding:2px 6px;}" +
+            "pre{background:#F5F7F9;border:1px solid #E3E7EC;border-radius:4px;padding:12px;}" +
+            "img{max-width:100%;border-radius:3px;}" +
+            "hr{border:none;border-top:1px solid #E3E7EC;}" +
             "table{border-collapse:collapse;}" +
-            "th,td{border:1px solid #F0E0B8;padding:6px 10px;}"
+            "th,td{border:1px solid #E3E7EC;padding:6px 10px;}"
 
     /**
      * 将帖子 Markdown 上传到 htmlto.link，生成可访问的分享链接。
@@ -600,7 +616,7 @@ object ExportManager {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 settings.useWideViewPort = true
-                setBackgroundColor(Color.parseColor("#FFF8E7"))
+                setBackgroundColor(Color.parseColor(EXPORT_PAGE_COLOR))
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
             }
@@ -631,7 +647,7 @@ object ExportManager {
                 val bitmapHeight = (safeHeight * scale).roundToInt().coerceAtLeast(1)
                 val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.parseColor("#FFF8E7"))
+                canvas.drawColor(Color.parseColor(EXPORT_PAGE_COLOR))
                 canvas.scale(
                     bitmapWidth.toFloat() / viewportWidth.toFloat(),
                     bitmapHeight.toFloat() / safeHeight.toFloat(),

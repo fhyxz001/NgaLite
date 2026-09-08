@@ -7,7 +7,9 @@ data class Topic(
     val replies: String,
     val author: String,
     val replyTime: String,
-    val previewImages: List<String> = emptyList()
+    val previewImages: List<String> = emptyList(),
+    /** 最后回复者 uid，用于用户名缺失时回查 */
+    val uid: String = ""
 )
 
 /** 帖子详情中的单条回复（楼层） */
@@ -17,7 +19,9 @@ data class Post(
     val date: String,
     val likes: String = "0",
     val views: String = "0",
-    val contentNodes: List<ContentNode>
+    val contentNodes: List<ContentNode>,
+    /** 楼层作者 uid，用于用户名缺失时回查 */
+    val uid: String = ""
 )
 
 /** 帖子正文中的内容节点 */

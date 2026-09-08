@@ -5,8 +5,23 @@
     <!-- 适配手机屏幕 16:9 展示：宽度跟随设备，移动端字号 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        /* 论坛（BBS）风格导出模板：浅灰页面底 + 白色内容块 + 发丝线分隔 + 链接蓝/楼主金 */
         :root {
             color-scheme: light;
+            --page: #EDEFF3;
+            --surface: #FFFFFF;
+            --divider: #E3E7EC;
+            --divider-soft: #F0F2F5;
+            --link: #1F6FB2;
+            --accent: #2A5F8F;
+            --meta: #8B95A1;
+            --floor: #A9B3BF;
+            --owner-bg: #FFF3D6;
+            --owner-text: #9A6B00;
+            --quote-bg: #F5F7F9;
+            --quote-bar: #B9C6D3;
+            --text: #1F2733;
+            --text-soft: #5A6572;
         }
         * {
             box-sizing: border-box;
@@ -14,38 +29,41 @@
         html, body {
             margin: 0;
             padding: 0;
-            background: #FFF8E7;
-            color: #1f2937;
+            background: var(--page);
+            color: var(--text);
             font-family: 'PingFang SC', 'Helvetica Neue', STHeiti, 'Microsoft Yahei', sans-serif;
         }
         body {
-            padding: 12px 12px 24px;
+            padding: 10px 10px 22px;
         }
         .page {
             width: 100%;
             max-width: 100%;
             margin: 0 auto;
-            padding: 20px 18px 26px;
-            border-radius: 14px;
-            background: #FFFDF7;
-            box-shadow: 0 8px 30px rgba(180, 150, 80, 0.10);
         }
+        /* 标题：白底 + 左侧蓝色竖条 */
         .title {
-            margin: 0 0 16px;
-            font-size: 20px;
-            line-height: 1.4;
+            margin: 0 0 10px;
+            padding: 13px 14px 12px 15px;
+            font-size: 19px;
+            line-height: 1.45;
             font-weight: 700;
-            color: #1a1a1a;
+            color: var(--text);
+            background: var(--surface);
+            border: 1px solid var(--divider);
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            word-break: break-word;
         }
         /* 分享预览区（倒 T 型）：顶部极简提示 / 中部大字标题 / 底部弱化装饰 */
         .share-preview {
             display: flex;
             flex-direction: column;
-            margin: 0 0 20px;
+            margin: 0 0 10px;
             min-height: 420px;
             overflow: hidden;
-            border-radius: 16px;
-            background: linear-gradient(180deg, #1F2937 0%, #2B1B0E 78%, #17120C 100%);
+            border-radius: 4px;
+            background: linear-gradient(180deg, #1B3550 0%, #2A5F8F 78%, #17304A 100%);
             color: #ffffff;
         }
         .share-preview.is-hidden {
@@ -84,10 +102,10 @@
             line-height: 1.25;
             font-weight: 800;
             letter-spacing: 1px;
-            color: #FFF3D6;
+            color: #FFFFFF;
             text-align: center;
             word-break: break-word;
-            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
         }
         .preview-bottom {
             flex: 0 0 auto;
@@ -99,58 +117,61 @@
             display: inline-block;
             font-size: 12px;
             line-height: 1.5;
-            color: rgba(255, 255, 255, 0.45);
+            color: rgba(255, 255, 255, 0.5);
             letter-spacing: 2px;
         }
-        /* 主楼卡片 */
+        /* 主楼：白色内容块，头部发丝线分隔 */
         .post-main {
-            padding: 16px;
-            margin-bottom: 16px;
-            border-radius: 12px;
-            background: #FFF3D6;
-            border: 1px solid #F0E0B8;
+            padding: 13px 14px 14px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background: var(--surface);
+            border: 1px solid var(--divider);
         }
         .post-main .post-head {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             flex-wrap: wrap;
             gap: 6px;
+            padding-bottom: 9px;
             margin-bottom: 10px;
+            border-bottom: 1px solid var(--divider);
         }
         .post-main .post-head-left {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
         .post-main .post-author {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
-            color: #8B6914;
+            color: var(--link);
         }
         .post-main .post-lz {
-            font-size: 12px;
-            font-weight: 600;
-            color: #1565C0;
-            background: #E3F2FD;
-            padding: 2px 8px;
-            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--owner-text);
+            background: var(--owner-bg);
+            padding: 1px 6px;
+            border-radius: 2px;
         }
         .post-main .post-date {
             font-size: 12px;
-            color: #A08850;
+            color: var(--meta);
+            margin-left: auto;
         }
         .post-main .post-likes {
-            font-size: 12px;
-            color: #C97B00;
-            background: #FFF0D0;
-            padding: 2px 8px;
-            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--owner-text);
+            background: var(--owner-bg);
+            padding: 1px 6px;
+            border-radius: 2px;
         }
         .post-main .post-content {
-            font-size: 16px;
-            line-height: 1.8;
-            color: #2D2410;
+            font-size: 15px;
+            line-height: 1.85;
+            color: var(--text);
             word-break: break-word;
         }
         .post-main .post-content p {
@@ -164,58 +185,104 @@
             max-width: 100%;
             height: auto;
             margin: 10px 0;
-            border-radius: 8px;
-            background: #FFF8E7;
+            border-radius: 3px;
+            background: var(--quote-bg);
         }
+        /* 表情图保持行内，避免被上面的 img 规则撑成独立一块 */
+        .post-main .post-content img.emoji {
+            display: inline-block;
+            height: 1.3em;
+            width: auto;
+            margin: 0 1px;
+            vertical-align: text-bottom;
+            background: transparent;
+        }
+        /* 引用块：左侧竖线 + 浅灰底 */
         .post-main .post-content blockquote {
             margin: 10px 0;
-            padding: 10px 12px;
-            border-left: 3px solid #D4B860;
-            background: #FFFAEC;
-            border-radius: 6px;
-            color: #6B5A30;
-            font-size: 14px;
-            line-height: 1.7;
+            padding: 8px 10px;
+            border-left: 3px solid var(--quote-bar);
+            background: var(--quote-bg);
+            border-radius: 2px;
+            color: var(--text-soft);
+            font-size: 13px;
+            line-height: 1.75;
         }
         .post-main .post-content blockquote .quote-label {
             display: block;
             font-size: 11px;
             font-weight: 600;
-            color: #8B7A40;
-            margin-bottom: 4px;
+            color: var(--meta);
+            margin-bottom: 3px;
         }
-        /* 回复合并区 */
+        /* 回复区：白色内容块，每条回复发丝线分隔 */
         .replies-section {
-            padding: 14px 16px;
-            border-radius: 12px;
-            background: #FFFAF0;
-            border: 1px solid #F0E8D0;
+            padding: 0 14px;
+            border-radius: 4px;
+            background: var(--surface);
+            border: 1px solid var(--divider);
         }
         .replies-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             font-size: 13px;
             font-weight: 700;
-            color: #8B6914;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #F0E0B8;
+            color: var(--text);
+            padding: 12px 0 10px;
+            border-bottom: 1px solid var(--divider);
         }
         .reply-line {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--divider-soft);
             font-size: 14px;
-            line-height: 1.9;
-            color: #3D3220;
+            line-height: 1.85;
+            color: var(--text);
             word-break: break-word;
         }
+        .reply-line:last-child {
+            border-bottom: none;
+            padding-bottom: 12px;
+        }
+        .reply-line .reply-head {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .reply-line .reply-author {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--link);
+            min-width: 0;
+            max-width: 60%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .reply-line .reply-date {
+            font-size: 11px;
+            color: var(--meta);
+        }
         .reply-line .reply-floor {
-            font-weight: 600;
-            color: #8B6914;
+            font-size: 11px;
+            color: var(--floor);
+            margin-left: auto;
+        }
+        .reply-line .reply-body {
+            font-size: 14px;
+            line-height: 1.85;
+            color: var(--text);
+            word-break: break-word;
         }
         .reply-line .reply-img {
             display: block;
             max-width: 100%;
             height: auto;
             margin: 8px 0;
-            border-radius: 8px;
-            background: #FFF8E7;
+            border-radius: 3px;
+            background: var(--quote-bg);
         }
         .reply-line .reply-emoji {
             display: inline-block;
@@ -225,53 +292,54 @@
             margin: 0 1px;
         }
         .reply-line .reply-quote {
-            color: #6B5A30;
+            color: var(--text-soft);
         }
         /* 页脚 */
         .export-footer {
-            margin-top: 18px;
-            padding-top: 14px;
-            border-top: 1px solid #E8D8B0;
+            margin-top: 10px;
+            padding: 12px 14px;
+            background: var(--surface);
+            border: 1px solid var(--divider);
+            border-radius: 4px;
         }
         .export-footer-line {
             font-size: 12px;
             line-height: 1.6;
-            color: #8B7B50;
+            color: var(--meta);
         }
         .export-credit-brand {
-            color: #B8860B;
+            color: var(--accent);
             font-weight: 700;
         }
         .export-credit {
             margin: 6px 0 0;
             font-size: 11px;
             line-height: 1.6;
-            color: #A09870;
+            color: var(--floor);
             word-break: break-all;
         }
         .is-hidden {
             display: none !important;
         }
         .export-qrcode {
-            margin-top: 16px;
-            padding: 12px;
-            border-radius: 12px;
-            background: #FFFAEC;
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            background: var(--quote-bg);
             text-align: center;
         }
         .export-qrcode img {
             display: block;
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 8px;
-            border-radius: 8px;
+            width: 118px;
+            height: 118px;
+            margin: 0 auto 6px;
+            border-radius: 3px;
             background: #ffffff;
-            box-shadow: 0 2px 10px rgba(180, 150, 80, 0.10);
         }
         .export-qrcode-tip {
             display: block;
             font-size: 12px;
-            color: #8B7B50;
+            color: var(--meta);
         }
         @page {
             margin: 8mm;
@@ -286,9 +354,6 @@
             .page {
                 max-width: none;
                 margin: 0;
-                padding: 0;
-                border-radius: 0;
-                box-shadow: none;
             }
         }
     </style>

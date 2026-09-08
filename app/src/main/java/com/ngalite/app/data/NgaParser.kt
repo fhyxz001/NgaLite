@@ -16,6 +16,10 @@ object NgaParser {
     )
 
     private val TID_REGEX = Regex("""tid=(\d+)""")
+    private val UID_REGEX = Regex("""[?&]uid=(\d+)""")
+    /** 页面内嵌用户表 commonui.userInfo.setAll({...}) 里的 uid → 用户名条目（容忍空格/引号差异） */
+    private val USER_BLOB_REGEX =
+        Regex(""""uid"\s*:\s*"?(\d+)"?\s*,\s*"username"\s*:\s*"((?:[^"\\]|\\.)*)"""")
     private val BR_REGEX = """(?i)<br\s*/?>""".toRegex()
     private val P_REGEX = """(?i)</p>""".toRegex()
     private val DIV_REGEX = """(?i)</div>""".toRegex()
@@ -41,13 +45,14 @@ object NgaParser {
     fun parseDetail(html: String): DetailResult {
         val doc = Jsoup.parse(html)
         val title = extractTitle(doc)
-        val posts = parsePostsFromDoc(doc)
+        val posts = parsePostsFromDoc(doc, parseUserNameMap(html))
         return DetailResult(title, posts)
     }
 
     /** 解析帖子列表 */
     fun parseTopicList(html: String): List<Topic> {
         val doc = Jsoup.parse(html)
+        val userNames = parseUserNameMap(html)
         val rows = doc.select("tr.topicrow")
         return rows.mapNotNull { row ->
             val topicLink = row.selectFirst("a.topic") ?: return@mapNotNull null
@@ -56,10 +61,101 @@ object NgaParser {
             val title = topicLink.text().trim()
             val replies = row.selectFirst("a.replies")?.text()?.trim() ?: ""
             val replyTime = row.selectFirst(".replydate")?.text()?.trim() ?: ""
-            val author = row.selectFirst(".replyer")?.text()?.trim() ?: ""
+            // 最后回复者：老版页面直接渲染名字，新版页面为空节点，需要用内嵌用户表按 uid 补全
+            val replyerEl = row.selectFirst(".replyer")
+            val replyerUid = extractUid(replyerEl)
+            val author = resolveAuthorName(replyerEl, replyerUid, userNames)
             val previewImages = extractPreviewImages(row, title)
-            if (title.isEmpty()) null else Topic(tid, title, replies, author, replyTime, previewImages)
+            if (title.isEmpty()) null
+            else Topic(tid, title, replies, author, replyTime, previewImages, replyerUid)
         }
+    }
+
+    /** 从形如 nuke.php?func=ucp&uid=12345 的链接里取出用户 uid（元素本身或其内部链接） */
+    private fun extractUid(element: org.jsoup.nodes.Element?): String {
+        if (element == null) return ""
+        val href = element.attr("href").ifBlank {
+            element.selectFirst("a[href]")?.attr("href").orEmpty()
+        }
+        return UID_REGEX.find(href)?.groupValues?.get(1).orEmpty()
+    }
+
+    /**
+     * 解析页面内嵌的用户表 `commonui.userInfo.setAll({...})`：老版 read.php 会内联整页的
+     * uid → 用户名映射（用户名并不在楼层 HTML 里，而是由前端脚本填入空锚点）。
+     * 新版页面不再内联，此时返回空表，由调用方按 uid 回查接口。
+     */
+    private fun parseUserNameMap(html: String): Map<String, String> {
+        val start = html.indexOf("userInfo.setAll(")
+        if (start < 0) return emptyMap()
+        val end = html.indexOf("</script>", start).let { if (it < 0) html.length else it }
+        val blob = html.substring(start, end)
+        val result = HashMap<String, String>()
+        USER_BLOB_REGEX.findAll(blob).forEach { match ->
+            val uid = match.groupValues[1]
+            val name = unescapeJs(match.groupValues[2]).trim()
+            if (uid.isNotEmpty() && name.isNotEmpty()) result[uid] = name
+        }
+        return result
+    }
+
+    /** 还原 JSON 字符串中的转义（\" \\ \uXXXX 等） */
+    private fun unescapeJs(raw: String): String {
+        if ('\\' !in raw) return raw
+        val sb = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            val c = raw[i]
+            if (c != '\\' || i + 1 >= raw.length) {
+                sb.append(c)
+                i++
+                continue
+            }
+            when (val next = raw[i + 1]) {
+                'n' -> sb.append('\n')
+                'r' -> sb.append('\r')
+                't' -> sb.append('\t')
+                'b' -> sb.append('\b')
+                'f' -> sb.append('\u000C')
+                'u' -> {
+                    val hex = raw.substring(i + 2, minOf(i + 6, raw.length))
+                    val code = hex.toIntOrNull(16)
+                    if (code != null) {
+                        sb.append(code.toChar())
+                        i += 4
+                    } else {
+                        sb.append(next)
+                    }
+                }
+                else -> sb.append(next)
+            }
+            i += 2
+        }
+        return sb.toString()
+    }
+
+    /**
+     * 作者名来源优先级：
+     * 1. 页面内嵌用户表（按 uid 命中，最准确）
+     * 2. 元素上的 `data-name`（NGA 增强脚本会把用户名写在这里）
+     * 3. 锚点自身文本（剔除"楼主"等身份标签与管理员角标）
+     */
+    private fun resolveAuthorName(
+        element: org.jsoup.nodes.Element?,
+        uid: String,
+        userNames: Map<String, String>
+    ): String {
+        if (uid.isNotEmpty()) {
+            userNames[uid]?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        if (element == null) return ""
+        val dataName = element.attr("data-name").trim().ifBlank {
+            element.selectFirst("[data-name]")?.attr("data-name")?.trim().orEmpty()
+        }
+        if (dataName.isNotBlank()) return dataName
+        val clone = element.clone()
+        clone.select(".hld__post-author, .hld__extra-icon, sup").remove()
+        return clone.text().trim()
     }
 
     /** 从帖子行中提取主楼预览图片地址 */
@@ -137,17 +233,17 @@ object NgaParser {
     }
 
     /** Parses all floors in a thread detail response. */
-    fun parsePosts(html: String): List<Post> = parsePostsFromDoc(Jsoup.parse(html))
+    fun parsePosts(html: String): List<Post> = parsePostsFromDoc(Jsoup.parse(html), parseUserNameMap(html))
 
-    private fun parsePostsFromDoc(doc: org.jsoup.nodes.Document): List<Post> {
+    private fun parsePostsFromDoc(
+        doc: org.jsoup.nodes.Document,
+        userNames: Map<String, String> = emptyMap()
+    ): List<Post> {
         val rows = doc.select("tr.postrow")
         return rows.mapIndexedNotNull { index, row ->
             val authorEl = row.selectFirst("[id^=postauthor]")
-            val author = if (authorEl == null) "" else {
-                // 用户锚点内会附带"楼主"等身份标签，需剔除后再取用户名
-                authorEl.select(".hld__post-author").remove()
-                authorEl.text().trim()
-            }
+            val uid = extractUid(authorEl)
+            val author = resolveAuthorName(authorEl, uid, userNames)
             val date = row.selectFirst("[id^=postdate]")?.text()?.trim() ?: ""
             val contentEl = row.selectFirst("[id^=postcontent]") ?: return@mapIndexedNotNull null
             val rawText = htmlToText(contentEl.html())
@@ -155,7 +251,7 @@ object NgaParser {
             val floor = row.selectFirst("a[name^=l]")?.text()?.trim() ?: "#$index"
             val likes = parseLikes(row)
             val views = parseViews(row)
-            Post(floor, author, date, likes, views, contentNodes)
+            Post(floor, author, date, likes, views, contentNodes, uid)
         }
     }
 

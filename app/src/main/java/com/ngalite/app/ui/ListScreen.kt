@@ -792,16 +792,19 @@ private fun TopicItem(
                 )
                 Spacer(Modifier.height(5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        topic.author.ifBlank { "匿名" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ForumColors.Link,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
+                    // 最后回复者名字可能为空（新版页面由脚本填充），此时只显示时间
+                    if (topic.author.isNotBlank()) {
+                        Text(
+                            topic.author,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ForumColors.Link,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (topic.replyTime.isNotBlank()) Spacer(Modifier.width(6.dp))
+                    }
                     if (topic.replyTime.isNotBlank()) {
-                        Spacer(Modifier.width(6.dp))
                         Text(
                             topic.replyTime,
                             style = MaterialTheme.typography.labelSmall,

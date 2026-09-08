@@ -84,9 +84,13 @@ import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
 import java.nio.charset.Charset
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -144,6 +148,10 @@ class DetailViewModel : ViewModel() {
 
     /** 当前加载协程，新加载前取消上一个，避免并发请求浪费带宽 */
     private var loadJob: kotlinx.coroutines.Job? = null
+
+    /** 楼层作者名回查协程 + 并发上限（新版页面不在 HTML 里渲染作者名） */
+    private var nameJob: kotlinx.coroutines.Job? = null
+    private val nameSemaphore = Semaphore(4)
 
     fun load(tid: String, forumName: String = "") {
         currentTid = tid
@@ -212,12 +220,50 @@ class DetailViewModel : ViewModel() {
                     currentPage = page,
                     hasMore = result.posts.size >= PAGE_SIZE
                 )
+                // 正文先展示，作者名缺失时再按 uid 回查（不阻塞阅读）
+                resolveAuthorNames(myGen)
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (t: Throwable) {
                 if (myGen != loadGeneration) return@launch
                 _state.value = DetailUiState.Error(t.message ?: "未知错误")
             }
+        }
+    }
+
+    /**
+     * 楼层作者名回查：新版 NGA 的 read.php 只在 HTML 里给出作者 uid（`#postauthorN` 锚点为空，
+     * 用户名由页面脚本填充），因此解析不到名字时按 uid 调接口补全，拿到后原地刷新状态。
+     */
+    private fun resolveAuthorNames(generation: Long) {
+        val snapshot = _state.value as? DetailUiState.Success ?: return
+        val uids = (listOfNotNull(snapshot.originalPost) + snapshot.comments)
+            .filter { it.author.isBlank() && it.uid.isNotBlank() }
+            .map { it.uid }
+            .distinct()
+        if (uids.isEmpty()) return
+
+        nameJob?.cancel()
+        nameJob = viewModelScope.launch {
+            val resolved: Map<String, String> = withContext(Dispatchers.IO) {
+                uids.map { uid ->
+                    async {
+                        nameSemaphore.withPermit {
+                            uid to runCatching { NgaApi.fetchUserName(uid) }.getOrNull()
+                        }
+                    }
+                }.awaitAll()
+                    .mapNotNull { (uid, name) -> name?.takeIf { it.isNotBlank() }?.let { uid to it } }
+                    .toMap()
+            }
+            if (resolved.isEmpty() || generation != loadGeneration) return@launch
+            val current = _state.value as? DetailUiState.Success ?: return@launch
+            fun withName(post: Post): Post =
+                resolved[post.uid]?.let { post.copy(author = it) } ?: post
+            _state.value = current.copy(
+                originalPost = current.originalPost?.let { withName(it) },
+                comments = current.comments.map { withName(it) }
+            )
         }
     }
 
@@ -515,8 +561,8 @@ fun DetailScreen(
                     }
                 }
 
-                // 回复列表
-                itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}-${post.author}" }) { _, post ->
+                // 回复列表（key 不含作者名：用户名回查后原地刷新，避免楼层被重建）
+                itemsIndexed(s.comments, key = { index, post -> "${s.currentPage}-$index-${post.floor}" }) { _, post ->
                     FloorCard(
                         post = post,
                         isOwner = false,
@@ -752,6 +798,14 @@ private fun SectionBar(text: String, trailing: String? = null) {
 }
 
 /**
+ * 楼层作者显示名：真实用户名 > UID 占位 > 匿名。
+ * 用户名回查期间先显示 UID 占位，拿到后由 ViewModel 刷新状态替换为真实用户名。
+ */
+private fun displayAuthor(post: Post): String = post.author.ifBlank {
+    if (post.uid.isNotBlank()) "UID:${post.uid}" else "匿名"
+}
+
+/**
  * 论坛楼层卡片：作者 + 楼主徽标 + 楼层号，发丝线下方是正文
  */
 @Composable
@@ -777,7 +831,7 @@ private fun FloorCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    post.author.ifBlank { "匿名" },
+                    displayAuthor(post),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = ForumColors.Link,
@@ -804,7 +858,11 @@ private fun FloorCard(
                 }
             }
             Text(
-                if (post.floor.startsWith("#")) post.floor else "#${post.floor}",
+                when {
+                    post.floor.isBlank() -> ""
+                    post.floor.startsWith("#") -> post.floor
+                    else -> "#${post.floor}"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = ForumColors.Floor,
                 maxLines = 1,
