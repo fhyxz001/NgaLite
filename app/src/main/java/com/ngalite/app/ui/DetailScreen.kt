@@ -48,7 +48,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -290,15 +289,23 @@ class DetailViewModel : ViewModel() {
     companion object {
         /** NGA read.php 每页固定条数，用于智能判断是否还有下一页 */
         private const val PAGE_SIZE = 20
+
+        /** 分享图片内评论条数上限，超出部分不渲染，控制长图高度 */
+        private const val IMAGE_MAX_COMMENTS = 10
     }
 
     private fun postUrl(): String =
         if (currentTid.isBlank()) "" else "${BaseConfig.baseUrl}/read.php?tid=$currentTid"
 
-    private fun exportContent(): ExportManager.ExportContent? =
+    private fun exportContent(maxComments: Int = Int.MAX_VALUE): ExportManager.ExportContent? =
         (state.value as? DetailUiState.Success)?.let { success ->
-            val allPosts = listOfNotNull(success.originalPost) + success.comments
-            ExportManager.ExportContent(success.title, allPosts, postUrl())
+            val allPosts = listOfNotNull(success.originalPost) + success.comments.take(maxComments)
+            ExportManager.ExportContent(
+                title = success.title,
+                posts = allPosts,
+                url = postUrl(),
+                totalReplies = success.comments.size,
+            )
         }
 
     /** 复制纯文本到剪贴板（不再使用 Markdown 格式） */
@@ -313,7 +320,6 @@ class DetailViewModel : ViewModel() {
     /** 导出 HTML 到下载目录 */
     fun exportHtml(
         context: Context,
-        includeAttribution: Boolean,
         onResult: (Boolean, String) -> Unit,
     ) {
         val content = exportContent()
@@ -324,7 +330,7 @@ class DetailViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                val html = ExportManager.buildExportHtml(context, content)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val name = ExportManager.buildFileName(content.title, "html")
                 val location = withContext(Dispatchers.IO) {
@@ -340,7 +346,6 @@ class DetailViewModel : ViewModel() {
     /** 上传 HTML 生成分享链接，成功后自动复制链接到剪贴板 */
     fun exportShareLink(
         context: Context,
-        includeAttribution: Boolean,
         onResult: (Boolean, String) -> Unit,
     ) {
         val content = exportContent()
@@ -354,7 +359,7 @@ class DetailViewModel : ViewModel() {
                 // 按设置页选择的分享服务生成链接：配置1 pad / 配置2 htmlto.link
                 val link = when (HtmlShareConfig.provider()) {
                     HtmlShareConfig.Provider.PAD -> {
-                        val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                        val html = ExportManager.buildExportHtml(context, content)
                         val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                         ExportManager.uploadHtmlToPad(inlined)
                     }
@@ -374,13 +379,12 @@ class DetailViewModel : ViewModel() {
         }
     }
 
-    /** 导出图片到相册（按手机屏幕宽度渲染） */
+    /** 导出图片到相册（按手机屏幕宽度渲染，评论最多保留前 10 条，避免长图过长） */
     fun exportImage(
         context: Context,
-        includeAttribution: Boolean,
         onResult: (Boolean, String) -> Unit,
     ) {
-        val content = exportContent()
+        val content = exportContent(maxComments = IMAGE_MAX_COMMENTS)
         if (content == null) {
             onResult(false, "内容未加载完成")
             return
@@ -388,7 +392,7 @@ class DetailViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content, includeAttribution)
+                val html = ExportManager.buildExportHtml(context, content, forImage = true)
                 val inlined = ExportManager.inlineImagesInHtml(html, cookie)
                 val bitmap = ExportManager.renderHtmlToBitmap(context, inlined)
                 try {
@@ -622,33 +626,33 @@ fun DetailScreen(
         ExportDialog(
             onDismiss = { if (!isExporting) showExportDialog = false },
             isExporting = isExporting,
-            onCopyText = { includeAttribution ->
+            onCopyText = {
                 if (vm.exportPlainText(context) != null) {
                     toast("纯文本已复制到剪贴板")
                     showExportDialog = false
                 }
             },
-            onExportHtml = { includeAttribution ->
+            onExportHtml = {
                 if (!ensureStoragePermission()) return@ExportDialog
                 isExporting = true
-                vm.exportHtml(context, includeAttribution) { success, msg ->
+                vm.exportHtml(context) { success, msg ->
                     isExporting = false
                     toast(msg)
                     if (success) showExportDialog = false
                 }
             },
-            onExportImage = { includeAttribution ->
+            onExportImage = {
                 if (!ensureStoragePermission()) return@ExportDialog
                 isExporting = true
-                vm.exportImage(context, includeAttribution) { success, msg ->
+                vm.exportImage(context) { success, msg ->
                     isExporting = false
                     toast(msg)
                     if (success) showExportDialog = false
                 }
             },
-            onExportShareLink = { includeAttribution ->
+            onExportShareLink = {
                 isExporting = true
-                vm.exportShareLink(context, includeAttribution) { success, msg ->
+                vm.exportShareLink(context) { success, msg ->
                     isExporting = false
                     if (success) {
                         shareText = msg
@@ -1297,13 +1301,11 @@ private fun InlineRichText(nodes: List<ContentNode>) {
 private fun ExportDialog(
     onDismiss: () -> Unit,
     isExporting: Boolean,
-    onCopyText: (includeAttribution: Boolean) -> Unit,
-    onExportHtml: (includeAttribution: Boolean) -> Unit,
-    onExportImage: (includeAttribution: Boolean) -> Unit,
-    onExportShareLink: (includeAttribution: Boolean) -> Unit,
+    onCopyText: () -> Unit,
+    onExportHtml: () -> Unit,
+    onExportImage: () -> Unit,
+    onExportShareLink: () -> Unit,
 ) {
-    var includeAttribution by remember { mutableStateOf(true) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("分享") },
@@ -1317,33 +1319,16 @@ private fun ExportDialog(
                 Spacer(Modifier.height(12.dp))
 
                 ExportOption(Icons.Default.Link, "分享链接", "上传生成可访问链接") {
-                    onExportShareLink(includeAttribution)
+                    onExportShareLink()
                 }
                 ExportOption(Icons.Default.ContentCopy, "复制文本", "将帖子正文复制为纯文本") {
-                    onCopyText(includeAttribution)
+                    onCopyText()
                 }
                 ExportOption(Icons.Default.Html, "HTML", "保存为 HTML 文件到下载目录") {
-                    onExportHtml(includeAttribution)
+                    onExportHtml()
                 }
                 ExportOption(Icons.Default.Image, "图片", "渲染为长图并保存到相册") {
-                    onExportImage(includeAttribution)
-                }
-
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "包含 NgaLite 署名",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = includeAttribution,
-                        onCheckedChange = { includeAttribution = it },
-                        enabled = !isExporting,
-                    )
+                    onExportImage()
                 }
 
                 if (isExporting) {

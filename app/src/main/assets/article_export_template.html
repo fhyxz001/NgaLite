@@ -12,6 +12,7 @@
             --surface: #FFFFFF;
             --divider: #E3E7EC;
             --divider-soft: #F0F2F5;
+            --stripe: #F3F6F9;
             --link: #1F6FB2;
             --accent: #2A5F8F;
             --meta: #8B95A1;
@@ -35,6 +36,10 @@
         }
         body {
             padding: 10px 10px 22px;
+        }
+        /* 图片导出：顶部加大留白，避免分享到微信后标题紧贴图片上边缘 */
+        body.image-export {
+            padding: 48px 10px 22px;
         }
         .page {
             width: 100%;
@@ -221,6 +226,8 @@
             border-radius: 4px;
             background: var(--surface);
             border: 1px solid var(--divider);
+            /* 斑马纹色块需要贴合圆角卡片边缘 */
+            overflow: hidden;
         }
         .replies-title {
             display: flex;
@@ -233,16 +240,49 @@
             border-bottom: 1px solid var(--divider);
         }
         .reply-line {
-            padding: 10px 0;
-            border-bottom: 1px solid var(--divider-soft);
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            /* 负边距让斑马底色铺满整行卡片宽度，不受父级左右内边距限制 */
+            margin: 0 -14px;
+            padding: 10px 14px;
             font-size: 14px;
             line-height: 1.85;
             color: var(--text);
             word-break: break-word;
         }
+        /* 斑马纹：奇偶楼层交替浅灰/纯白，降低长列表阅读疲劳（首条回复为纯白） */
+        .reply-line:nth-child(odd) {
+            background: var(--stripe);
+        }
         .reply-line:last-child {
-            border-bottom: none;
             padding-bottom: 12px;
+        }
+        /* 楼层头像：圆形，缺失时首字占位 */
+        .reply-line .reply-avatar {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            margin-top: 2px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--quote-bg);
+            border: 1px solid var(--divider);
+        }
+        .reply-line .reply-avatar-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+            color: #FFFFFF;
+            background: var(--accent);
+            border: none;
+        }
+        .reply-line .reply-main {
+            flex: 1 1 auto;
+            min-width: 0;
         }
         .reply-line .reply-head {
             display: flex;
@@ -264,6 +304,15 @@
         .reply-line .reply-date {
             font-size: 11px;
             color: var(--meta);
+        }
+        .reply-line .reply-likes {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--owner-text);
+            background: var(--owner-bg);
+            padding: 1px 6px;
+            border-radius: 2px;
+            white-space: nowrap;
         }
         .reply-line .reply-floor {
             font-size: 11px;
@@ -307,17 +356,6 @@
             line-height: 1.6;
             color: var(--meta);
         }
-        .export-credit-brand {
-            color: var(--accent);
-            font-weight: 700;
-        }
-        .export-credit {
-            margin: 6px 0 0;
-            font-size: 11px;
-            line-height: 1.6;
-            color: var(--floor);
-            word-break: break-all;
-        }
         .is-hidden {
             display: none !important;
         }
@@ -358,7 +396,7 @@
         }
     </style>
 </head>
-<body class="{{previewClass}}">
+<body class="{{bodyClass}}">
     <main class="page">
         {{previewHeaderHtml}}
         <h1 class="title">{{title}}</h1>
@@ -366,9 +404,6 @@
         {{repliesHtml}}
         <footer class="export-footer">
             <div class="export-footer-line">{{exportedDate}}</div>
-            <p class="{{appAttributionClass}}">
-                本帖使用<span class="export-credit-brand">NgaLite</span>导出，开源轻量 NGA 第三方客户端。
-            </p>
             {{qrCodeHtml}}
         </footer>
     </main>

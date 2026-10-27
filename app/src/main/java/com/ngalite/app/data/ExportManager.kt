@@ -61,21 +61,26 @@ object ExportManager {
         NgaApi.sharedClientBuilder().build()
     }
 
-    /** 导出内容快照 */
-    data class ExportContent(val title: String, val posts: List<Post>, val url: String = "")
+    /** 导出内容快照；[totalReplies] 为帖子实际回复总数，用于标注"仅显示前 N 条" */
+    data class ExportContent(
+        val title: String,
+        val posts: List<Post>,
+        val url: String = "",
+        val totalReplies: Int = -1,
+    )
 
     // ---- HTML 构建 ----
 
     fun buildExportHtml(
         context: Context,
         content: ExportContent,
-        includeAttribution: Boolean,
         withSharePreview: Boolean = false,
+        forImage: Boolean = false,
     ): String {
         val template = context.assets.open(TEMPLATE_ASSET).use { stream ->
             stream.bufferedReader().use { it.readText() }
         }
-        return renderTemplate(template, content, includeAttribution, withSharePreview)
+        return renderTemplate(template, content, withSharePreview, forImage)
     }
 
     /**
@@ -102,30 +107,34 @@ object ExportManager {
     private fun renderTemplate(
         template: String,
         content: ExportContent,
-        includeAttribution: Boolean,
         withSharePreview: Boolean = false,
+        forImage: Boolean = false,
     ): String {
         // 区分主楼和回复：主楼完整渲染，回复合并为紧凑格式
         val mainPost = content.posts.firstOrNull()
         val replies = content.posts.drop(1)
 
         val mainPostHtml = if (mainPost != null) buildMainPostHtml(mainPost) else ""
-        val repliesHtml = if (replies.isNotEmpty()) buildRepliesHtml(replies) else ""
+        val repliesHtml = if (replies.isNotEmpty()) {
+            buildRepliesHtml(replies, content.totalReplies)
+        } else ""
 
         val exportedDate = "导出日期：" +
             SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        val attributionClass = if (includeAttribution) "export-credit" else "export-credit is-hidden"
         val qrCodeHtml = buildQrCodeHtml(content.url)
         val previewHeaderHtml = if (withSharePreview) buildSharePreviewHtml(content.title) else ""
-        val previewBodyClass = if (withSharePreview) "has-share-preview" else ""
+        val bodyClass = buildList {
+            if (withSharePreview) add("has-share-preview")
+            // 图片导出时加大顶部留白，避免微信中打开长图标题紧贴顶部
+            if (forImage) add("image-export")
+        }.joinToString(" ")
         return template
-            .replace("{{previewClass}}", previewBodyClass)
+            .replace("{{bodyClass}}", bodyClass)
             .replace("{{previewHeaderHtml}}", previewHeaderHtml)
             .replace("{{title}}", escapeHtml(content.title))
             .replace("{{mainPostHtml}}", mainPostHtml)
             .replace("{{repliesHtml}}", repliesHtml)
             .replace("{{exportedDate}}", escapeHtml(exportedDate))
-            .replace("{{appAttributionClass}}", attributionClass)
             .replace("{{qrCodeHtml}}", qrCodeHtml)
     }
 
@@ -189,27 +198,48 @@ object ExportManager {
         """.trimMargin()
     }
 
-    /** 回复渲染：论坛楼层样式，每条回复显示作者/时间/楼层号后保留正文 */
-    private fun buildRepliesHtml(replies: List<Post>): String {
+    /** 楼层头：有头像地址时渲染圆形头像，缺失时用昵称首字占位 */
+    private fun buildAvatarHtml(avatarUrl: String, author: String): String {
+        if (avatarUrl.isNotBlank()) {
+            return """<img class="reply-avatar" src="${escapeHtml(avatarUrl)}" alt="" />"""
+        }
+        val letter = escapeHtml(author.trim().take(1).ifBlank { "?" })
+        return """<span class="reply-avatar reply-avatar-fallback">$letter</span>"""
+    }
+
+    /** 回复渲染：论坛楼层样式，每条回复显示头像/作者/时间/点赞/楼层号后保留正文 */
+    private fun buildRepliesHtml(replies: List<Post>, totalReplies: Int = -1): String {
         val lines = replies.mapIndexed { index, post ->
             val body = post.contentNodes.joinToString("") { node -> replyNodeToHtml(node) }
             val author = escapeHtml(post.author.ifBlank { "匿名" })
             val date = escapeHtml(post.date)
             val floor = escapeHtml(post.floor.ifBlank { "${index + 1}#" })
+            val avatarHtml = buildAvatarHtml(post.avatarUrl, post.author)
+            val likesHtml = if (post.likes.isNotBlank() && post.likes != "0") {
+                """<span class="reply-likes">赞 ${escapeHtml(post.likes)}</span>"""
+            } else ""
             """
             |<div class="reply-line">
-            |    <div class="reply-head">
-            |        <span class="reply-author">$author</span>
-            |        <span class="reply-date">$date</span>
-            |        <span class="reply-floor">$floor</span>
+            |    $avatarHtml
+            |    <div class="reply-main">
+            |        <div class="reply-head">
+            |            <span class="reply-author">$author</span>
+            |            <span class="reply-date">$date</span>
+            |            $likesHtml
+            |            <span class="reply-floor">$floor</span>
+            |        </div>
+            |        <div class="reply-body">$body</div>
             |    </div>
-            |    <div class="reply-body">$body</div>
             |</div>
             """.trimMargin()
         }.joinToString("\n")
+        // 评论被截断时标注实际总数，避免误读为帖子只有 N 条回复
+        val truncated = totalReplies > replies.size
+        val titleText = if (truncated) "回复" else "全部回复"
+        val countText = if (truncated) "共 $totalReplies 条 · 显示前 ${replies.size} 条" else "${replies.size} 条"
         return """
         |<div class="replies-section">
-        |    <div class="replies-title"><span>全部回复</span><span>${replies.size} 条</span></div>
+        |    <div class="replies-title"><span>$titleText</span><span>$countText</span></div>
         |    $lines
         |</div>
         """.trimMargin()
