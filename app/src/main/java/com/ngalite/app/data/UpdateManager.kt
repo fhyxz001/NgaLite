@@ -73,7 +73,8 @@ object UpdateManager {
                         val asset = assets.optJSONObject(i)
                         val name = asset?.optString("name", "") ?: ""
                         if (name.endsWith(".apk")) {
-                            downloadUrl = asset.optString("browser_download_url")
+                            // 通过 ghcr.nju.edu.cn 镜像加速 GitHub 下载
+                            downloadUrl = "https://ghcr.nju.edu.cn/" + asset.optString("browser_download_url")
                             break
                         }
                     }
