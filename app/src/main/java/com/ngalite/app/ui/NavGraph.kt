@@ -1,22 +1,30 @@
 package com.ngalite.app.ui
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,8 +36,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -44,69 +53,99 @@ import androidx.navigation.navOptions
 
 object Routes {
     const val COMMUNITY = "community"
+    const val RECORDS = "records"
     const val SETTINGS = "settings"
     const val LOGIN_WEB = "login_web"
     const val FORUM_THREADS = "forum_threads/{fid}"
-    const val DETAIL = "detail/{tid}"
+    const val DETAIL = "detail/{tid}?forumName={forumName}"
 
     fun forumThreads(fid: String) = "forum_threads/$fid"
-    fun detail(tid: String) = "detail/$tid"
+    fun detail(tid: String, forumName: String = ""): String {
+        val encoded = Uri.encode(forumName)
+        return "detail/$tid?forumName=$encoded"
+    }
 }
+
+private data class BottomTabItem(
+    val route: String,
+    val label: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector
+)
+
+private val bottomTabs = listOf(
+    BottomTabItem(
+        route = Routes.COMMUNITY,
+        label = "社区",
+        selectedIcon = Icons.Filled.Forum,
+        unselectedIcon = Icons.Outlined.Forum
+    ),
+    BottomTabItem(
+        route = Routes.RECORDS,
+        label = "足迹",
+        selectedIcon = Icons.Filled.Bookmarks,
+        unselectedIcon = Icons.Outlined.Bookmarks
+    ),
+    BottomTabItem(
+        route = Routes.SETTINGS,
+        label = "设置",
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings
+    )
+)
 
 @Composable
 fun NavGraph(initialFid: String? = null) {
     val nav = rememberNavController()
 
-    /** 安全导航包装：捕获导航异常防止界面崩溃，不跨操作吞掉异常 */
     fun navSafe(block: () -> Unit) {
         runCatching { block() }.onFailure { e ->
             Log.e("NavGraph", "导航操作失败", e)
         }
     }
 
-    // 从桌面快捷方式启动时，直接导航到帖子列表页
     LaunchedEffect(initialFid) {
         if (!initialFid.isNullOrBlank()) {
             navSafe { nav.navigate(Routes.forumThreads(initialFid)) }
         }
     }
 
-    /**
-     * 安全获取 ForumThreads 路由的 backStackEntry，用于 Detail 页读取当前板块名称。
-     */
     fun safeForumThreadsEntry(navController: NavController) = runCatching {
         navController.getBackStackEntry(Routes.FORUM_THREADS)
     }.getOrNull()
 
-    val transitionMs = 150
-
     fun AnimatedContentTransitionScope<*>.tabEnter(): EnterTransition =
-        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
+        fadeIn(tween(210, easing = FastOutSlowInEasing)) +
+            scaleIn(initialScale = 0.985f, animationSpec = tween(210, easing = FastOutSlowInEasing))
 
     fun AnimatedContentTransitionScope<*>.tabExit(): ExitTransition =
-        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
+        fadeOut(tween(150))
 
     fun AnimatedContentTransitionScope<*>.pageEnter(): EnterTransition =
-        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
+        slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 4 } +
+            fadeIn(tween(240))
 
     fun AnimatedContentTransitionScope<*>.pageExit(): ExitTransition =
-        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
+        slideOutHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 6 } +
+            fadeOut(tween(200))
 
     fun AnimatedContentTransitionScope<*>.pagePopEnter(): EnterTransition =
-        fadeIn(animationSpec = tween(transitionMs, easing = LinearOutSlowInEasing))
+        slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 6 } +
+            fadeIn(tween(220))
 
     fun AnimatedContentTransitionScope<*>.pagePopExit(): ExitTransition =
-        fadeOut(animationSpec = tween(transitionMs, easing = FastOutLinearInEasing))
+        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 4 } +
+            fadeOut(tween(220))
 
     val currentBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
-    val showBottomBar = currentRoute in setOf(Routes.COMMUNITY, Routes.SETTINGS)
+    val showBottomBar = currentRoute in setOf(Routes.COMMUNITY, Routes.RECORDS, Routes.SETTINGS)
 
     Scaffold(
+        containerColor = ForumColors.Page,
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         bottomBar = {
             if (showBottomBar) {
-                // 论坛风格底栏：白底 + 顶部发丝线 + 图标带文字，不做悬浮玻璃效果
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -116,71 +155,48 @@ fun NavGraph(initialFid: String? = null) {
                     NavigationBar(
                         modifier = Modifier.fillMaxWidth(),
                         containerColor = ForumColors.Surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        contentColor = ForumColors.TextPrimary,
                         tonalElevation = 0.dp
                     ) {
-                        NavigationBarItem(
-                            selected = currentRoute == Routes.COMMUNITY,
-                            onClick = {
-                                navSafe {
-                                    nav.navigate(
-                                        Routes.COMMUNITY,
-                                        navOptions {
-                                            popUpTo(nav.graph.findStartDestination().id) {
-                                                saveState = true
+                        bottomTabs.forEach { tab ->
+                            val selected = currentRoute == tab.route
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    navSafe {
+                                        nav.navigate(
+                                            tab.route,
+                                            navOptions {
+                                                popUpTo(nav.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
+                                        )
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = tab.label
                                     )
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Default.Forum,
-                                    contentDescription = "社区"
-                                )
-                            },
-                            label = { Text("社区") },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = ForumColors.Accent,
-                                selectedTextColor = ForumColors.Accent,
-                                indicatorColor = ForumColors.AccentSoft,
-                                unselectedIconColor = ForumColors.Meta,
-                                unselectedTextColor = ForumColors.Meta
-                            )
-                        )
-                        NavigationBarItem(
-                            selected = currentRoute == Routes.SETTINGS,
-                            onClick = {
-                                navSafe {
-                                    nav.navigate(
-                                        Routes.SETTINGS,
-                                        navOptions {
-                                            popUpTo(nav.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
+                                },
+                                label = {
+                                    Text(
+                                        text = tab.label,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                     )
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "设置"
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = ForumColors.Accent,
+                                    selectedTextColor = ForumColors.Accent,
+                                    indicatorColor = ForumColors.AccentSoft,
+                                    unselectedIconColor = ForumColors.Meta,
+                                    unselectedTextColor = ForumColors.Meta
                                 )
-                            },
-                            label = { Text("设置") },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = ForumColors.Accent,
-                                selectedTextColor = ForumColors.Accent,
-                                indicatorColor = ForumColors.AccentSoft,
-                                unselectedIconColor = ForumColors.Meta,
-                                unselectedTextColor = ForumColors.Meta
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -201,6 +217,19 @@ fun NavGraph(initialFid: String? = null) {
                 CommunityScreen(
                     onForumClick = { fid ->
                         navSafe { nav.navigate(Routes.forumThreads(fid)) }
+                    }
+                )
+            }
+            composable(
+                Routes.RECORDS,
+                enterTransition = { tabEnter() },
+                exitTransition = { tabExit() },
+                popEnterTransition = { tabEnter() },
+                popExitTransition = { tabExit() }
+            ) {
+                RecordsScreen(
+                    onTopicClick = { tid, forumName ->
+                        navSafe { nav.navigate(Routes.detail(tid, forumName)) }
                     }
                 )
             }
@@ -239,15 +268,19 @@ fun NavGraph(initialFid: String? = null) {
                 ForumThreadsScreen(
                     fid = fid,
                     onBack = { navSafe { nav.popBackStack() } },
-                    onTopicClick = { tid ->
-                        navSafe { nav.navigate(Routes.detail(tid)) }
+                    onTopicClick = { tid, forumName ->
+                        navSafe { nav.navigate(Routes.detail(tid, forumName)) }
                     }
                 )
             }
             composable(
                 route = Routes.DETAIL,
                 arguments = listOf(
-                    navArgument("tid") { type = NavType.StringType }
+                    navArgument("tid") { type = NavType.StringType },
+                    navArgument("forumName") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
                 ),
                 enterTransition = { pageEnter() },
                 exitTransition = { pageExit() },
@@ -255,10 +288,12 @@ fun NavGraph(initialFid: String? = null) {
                 popExitTransition = { pagePopExit() }
             ) { backStackEntry ->
                 val tid = backStackEntry.arguments?.getString("tid").orEmpty()
-                // 从 ForumThreads 的 ListViewModel 获取当前板块名称，避免通过路由传递
-                val forumName = safeForumThreadsEntry(nav)?.let { entry ->
-                    viewModel<ListViewModel>(entry).currentForum.value.name
-                } ?: ""
+                val argForumName = backStackEntry.arguments?.getString("forumName").orEmpty()
+                val forumName = argForumName.ifBlank {
+                    safeForumThreadsEntry(nav)?.let { entry ->
+                        viewModel<ListViewModel>(entry).currentForum.value.name
+                    }.orEmpty()
+                }
                 DetailScreen(
                     tid = tid,
                     forumName = forumName,

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#591804</color>
-    <!-- Keep the launch window visually continuous with the forum-style page background. -->
-    <color name="app_startup_background">#EDEFF3</color>
+    <color name="app_startup_background">#F3F5F8</color>
 </resources>

@@ -7,34 +7,60 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -52,11 +78,10 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 全屏图片查看器：支持左右滑动切换、右下角按钮保存到相册、单击关闭。
- *
- * @param images 图片 URL 列表
- * @param initialIndex 初始展示的图片索引
- * @param onDismiss 关闭回调
+ * 现代全屏图片查看器：
+ * - 支持左右滑动切换（1x 缩放时无缝交给 HorizontalPager）
+ * - 支持双指捏合缩放、双击放大/还原、放大后单指拖拽
+ * - 顶部悬浮关闭与页码指示，底部一键保存至相册
  */
 @Composable
 fun FullScreenImageViewer(
@@ -113,59 +138,209 @@ fun FullScreenImageViewer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.92f)),
+                .background(Color.Black.copy(alpha = 0.96f)),
             contentAlignment = Alignment.Center
         ) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                AsyncImage(
-                    model = images[page],
+                ZoomableImagePage(
+                    imageUrl = images[page],
                     contentDescription = "图片 ${page + 1}/${images.size}",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(page) {
-                            detectTapGestures(onTap = { onDismiss() })
-                        },
-                    contentScale = ContentScale.Fit
+                    onSingleTap = onDismiss
                 )
             }
 
-            // 下载按钮：右下角保存当前图片
-            IconButton(
-                onClick = { requestSave(images[pagerState.currentPage]) },
+            // 顶部透明 HUD：关闭按钮 + 页码胶囊
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp)
-                    .size(48.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.FileDownload,
-                    contentDescription = "保存图片",
-                    tint = Color.White
-                )
-            }
-
-            // 页码指示器：多张图片时显示当前页码
-            if (images.size > 1) {
-                Text(
-                    text = "${pagerState.currentPage + 1} / ${images.size}",
-                    color = Color.White,
+                IconButton(
+                    onClick = onDismiss,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 48.dp)
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.14f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "关闭",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (images.size > 1) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${pagerState.currentPage + 1} / ${images.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.size(40.dp))
+                }
+
+                Spacer(Modifier.size(40.dp))
             }
 
-            // 保存中指示器
-            if (isSaving) {
-                CircularProgressIndicator(color = Color.White)
+            // 底部保存按钮胶囊
+            Surface(
+                onClick = { requestSave(images[pagerState.currentPage]) },
+                enabled = !isSaving,
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White.copy(alpha = 0.16f),
+                contentColor = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "正在保存…",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = "保存图片",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "保存原图",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isSaving,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Box(Modifier.fillMaxSize())
             }
         }
+    }
+}
+
+@Composable
+private fun ZoomableImagePage(
+    imageUrl: String,
+    contentDescription: String,
+    onSingleTap: () -> Unit
+) {
+    var scale by remember(imageUrl) { mutableFloatStateOf(1f) }
+    var offset by remember(imageUrl) { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val animatedScale by animateFloatAsState(
+        targetValue = scale,
+        animationSpec = spring(),
+        label = "imgScale"
+    )
+
+    fun clampOffset(target: Offset, targetScale: Float): Offset {
+        if (targetScale <= 1f || containerSize.width == 0 || containerSize.height == 0) {
+            return Offset.Zero
+        }
+        val maxX = containerSize.width * (targetScale - 1f) / 2f
+        val maxY = containerSize.height * (targetScale - 1f) / 2f
+        return Offset(
+            x = target.x.coerceIn(-maxX, maxX),
+            y = target.y.coerceIn(-maxY, maxY)
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { containerSize = it }
+            .pointerInput(imageUrl) {
+                detectTapGestures(
+                    onTap = {
+                        if (scale > 1.05f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            onSingleTap()
+                        }
+                    },
+                    onDoubleTap = {
+                        if (scale > 1.2f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 2.4f
+                        }
+                    }
+                )
+            }
+            .pointerInput(imageUrl) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val pointerCount = event.changes.count { it.pressed }
+                        val zoomChange = event.calculateZoom()
+                        val panChange = event.calculatePan()
+
+                        // 仅当多指捏合或已处于放大状态时拦截事件，1x 单指滑动保留给 HorizontalPager 翻页
+                        if (pointerCount > 1 || scale > 1.02f || zoomChange != 1f) {
+                            val newScale = (scale * zoomChange).coerceIn(1f, 4f)
+                            scale = newScale
+                            offset = clampOffset(offset + panChange, newScale)
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = animatedScale
+                    scaleY = animatedScale
+                    translationX = offset.x
+                    translationY = offset.y
+                },
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -173,10 +348,6 @@ private fun toast(context: Context, msg: String) {
     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
 }
 
-/**
- * 通过 Coil 获取图片 Bitmap 并保存到相册。
- * 复用全局 ImageLoader 的内存/磁盘缓存，避免重复下载。
- */
 private suspend fun saveImageToGallery(
     context: Context,
     url: String,
@@ -192,7 +363,6 @@ private suspend fun saveImageToGallery(
             toast(context, "无法获取图片")
             return
         }
-        // toBitmap() 会处理 HARDWARE 配置的 bitmap，确保可被 compress 写入文件
         val bitmap = drawable.toBitmap()
         val name = "ngalite_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg"
         val location = withContext(Dispatchers.IO) {

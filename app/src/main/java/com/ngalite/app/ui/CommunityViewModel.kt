@@ -7,9 +7,11 @@ import com.ngalite.app.data.FavoriteStore
 import com.ngalite.app.data.Forum
 import com.ngalite.app.data.ForumCategory
 import com.ngalite.app.data.ForumRepository
+import com.ngalite.app.data.ThreadRecordsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -17,11 +19,15 @@ sealed interface CommunityUiState {
     data object Loading : CommunityUiState
     data class Success(
         val categories: List<ForumCategory>,
-        val selectedCategory: ForumCategory,
+        val selectedCategoryName: String,
         val favoriteFids: Set<String>,
+        val recentForums: List<Forum>,
         val query: String = "",
         val searchResults: List<Forum> = emptyList()
-    ) : CommunityUiState
+    ) : CommunityUiState {
+        val selectedCategory: ForumCategory
+            get() = categories.firstOrNull { it.name == selectedCategoryName } ?: categories.first()
+    }
 
     data class Error(val message: String) : CommunityUiState
 }
@@ -31,12 +37,18 @@ class CommunityViewModel : ViewModel() {
     private val _state = MutableStateFlow<CommunityUiState>(CommunityUiState.Loading)
     val state: StateFlow<CommunityUiState> = _state
 
+    private val selectedCategoryName = MutableStateFlow("我的收藏")
+    private val searchQuery = MutableStateFlow("")
+    private var isInitialized = false
+
     /** 防抖时间戳，避免快速连续点击收藏。 */
     private var lastToggleTime = 0L
-    private val toggleDebounceMs = 400L
+    private val toggleDebounceMs = 250L
 
     fun load(context: Context) {
+        if (isInitialized && _state.value is CommunityUiState.Success) return
         viewModelScope.launch {
+            _state.value = CommunityUiState.Loading
             try {
                 withContext(Dispatchers.IO) {
                     ForumRepository.load(context)
@@ -46,15 +58,43 @@ class CommunityViewModel : ViewModel() {
                     _state.value = CommunityUiState.Error("板块数据加载失败")
                     return@launch
                 }
-                val favoriteFids = FavoriteStore.getFavorites()
-                val displayCategories = buildDisplayCategories(categories, favoriteFids)
-                val selected = displayCategories.firstOrNull { it.name == "我的收藏" }
-                    ?: displayCategories.first()
-                _state.value = CommunityUiState.Success(
-                    categories = displayCategories,
-                    selectedCategory = selected,
-                    favoriteFids = favoriteFids
-                )
+                isInitialized = true
+                // 持续同步收藏与最近浏览板块变化
+                combine(
+                    FavoriteStore.favorites,
+                    ThreadRecordsStore.recentForumFids,
+                    selectedCategoryName,
+                    searchQuery
+                ) { favFids, recentFids, selectedName, query ->
+                    val displayCategories = buildDisplayCategories(categories, favFids)
+                    val validSelectedName = if (displayCategories.any { it.name == selectedName }) {
+                        selectedName
+                    } else {
+                        displayCategories.first().name
+                    }
+                    val forumMap = ForumRepository.allForums.associateBy { it.fid }
+                    val recent = recentFids.mapNotNull { forumMap[it] }
+                    val results = if (query.isBlank()) {
+                        emptyList()
+                    } else {
+                        val q = query.trim()
+                        ForumRepository.allForums.filter {
+                            it.name.contains(q, ignoreCase = true) ||
+                                it.description.contains(q, ignoreCase = true) ||
+                                it.fid == q
+                        }
+                    }
+                    CommunityUiState.Success(
+                        categories = displayCategories,
+                        selectedCategoryName = validSelectedName,
+                        favoriteFids = favFids,
+                        recentForums = recent,
+                        query = query,
+                        searchResults = results
+                    )
+                }.collect { newState ->
+                    _state.value = newState
+                }
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 _state.value = CommunityUiState.Error(t.message ?: "加载失败")
@@ -63,18 +103,11 @@ class CommunityViewModel : ViewModel() {
     }
 
     fun selectCategory(category: ForumCategory) {
-        val s = _state.value as? CommunityUiState.Success ?: return
-        _state.value = s.copy(selectedCategory = category)
+        selectedCategoryName.value = category.name
     }
 
     fun updateQuery(query: String) {
-        val s = _state.value as? CommunityUiState.Success ?: return
-        val searchResults = if (query.isBlank()) {
-            emptyList()
-        } else {
-            ForumRepository.allForums.filter { it.name.contains(query, ignoreCase = true) }
-        }
-        _state.value = s.copy(query = query, searchResults = searchResults)
+        searchQuery.value = query
     }
 
     fun toggleFavorite(fid: String) {
@@ -82,20 +115,6 @@ class CommunityViewModel : ViewModel() {
         if (now - lastToggleTime < toggleDebounceMs) return
         lastToggleTime = now
         FavoriteStore.toggle(fid)
-        val s = _state.value as? CommunityUiState.Success ?: return
-        val newFavorites = FavoriteStore.getFavorites()
-        val newCategories = buildDisplayCategories(ForumRepository.categories, newFavorites)
-        // 保持当前选中的分类在刷新后仍然有效；若当前选中的是「我的收藏」则继续选中它
-        val newSelected = if (s.selectedCategory.name == "我的收藏") {
-            newCategories.firstOrNull { it.name == "我的收藏" } ?: newCategories.first()
-        } else {
-            newCategories.firstOrNull { it.name == s.selectedCategory.name } ?: newCategories.first()
-        }
-        _state.value = s.copy(
-            categories = newCategories,
-            selectedCategory = newSelected,
-            favoriteFids = newFavorites
-        )
     }
 
     /** 构建展示用分类列表：第一项为「我的收藏」，其后为原始分类。 */
@@ -110,5 +129,4 @@ class CommunityViewModel : ViewModel() {
         }
         return listOf(ForumCategory("我的收藏", favoriteForums)) + categories
     }
-
 }
