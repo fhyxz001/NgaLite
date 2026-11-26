@@ -17,7 +17,11 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateManager {
 
-    private const val RELEASE_API = "https://api.github.com/repos/fhyxz001/NgaLite/releases/latest"
+    private val releaseApiMirrors = listOf(
+        "https://gh-proxy.com/https://api.github.com/repos/fhyxz001/NgaLite/releases/latest",
+        "https://ghfast.top/https://api.github.com/repos/fhyxz001/NgaLite/releases/latest",
+        "https://api.github.com/repos/fhyxz001/NgaLite/releases/latest"
+    )
 
     /** 更新检查结果 */
     data class UpdateResult(
@@ -39,56 +43,56 @@ object UpdateManager {
 
     /** 检查最新版本，与当前版本比较 */
     suspend fun checkUpdate(currentVersion: String): UpdateResult = withContext(Dispatchers.IO) {
-        try {
-            val req = Request.Builder()
-                .url(RELEASE_API)
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "NgaLite")
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    return@withContext UpdateResult(
-                        false, currentVersion, null,
-                        "检查更新失败 (HTTP ${resp.code})，挂梯子试试"
-                    )
-                }
-                val body = resp.body?.string()
-                    ?: return@withContext UpdateResult(
-                        false, currentVersion, null,
-                        "检查更新失败：响应为空，挂梯子试试"
-                    )
-                val json = JSONObject(body)
-                val tagName = json.optString("tag_name", "").removePrefix("v").trim()
-                if (tagName.isBlank()) {
-                    return@withContext UpdateResult(
-                        false, currentVersion, null,
-                        "检查更新失败：无法解析版本号，挂梯子试试"
-                    )
-                }
-                // 从 assets 中获取下载地址
-                var downloadUrl: String? = null
-                val assets = json.optJSONArray("assets")
-                if (assets != null && assets.length() > 0) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.optJSONObject(i)
-                        val name = asset?.optString("name", "") ?: ""
-                        if (name.endsWith(".apk")) {
-                            // 通过 ghcr.nju.edu.cn 镜像加速 GitHub 下载
-                            downloadUrl = "https://ghcr.nju.edu.cn/" + asset.optString("browser_download_url")
-                            break
+        var lastError = "检查更新失败"
+        for (apiUrl in releaseApiMirrors) {
+            try {
+                val req = Request.Builder()
+                    .url(apiUrl)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "NgaLite")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        lastError = "检查更新失败 (HTTP ${resp.code})"
+                        return@use
+                    }
+                    val body = resp.body?.string()
+                    if (body.isNullOrBlank()) {
+                        lastError = "检查更新失败：响应为空"
+                        return@use
+                    }
+                    val json = JSONObject(body)
+                    val tagName = json.optString("tag_name", "").removePrefix("v").trim()
+                    if (tagName.isBlank()) {
+                        lastError = "检查更新失败：无法解析版本号"
+                        return@use
+                    }
+                    // 从 assets 中获取下载地址
+                    var downloadUrl: String? = null
+                    val assets = json.optJSONArray("assets")
+                    if (assets != null && assets.length() > 0) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.optJSONObject(i)
+                            val name = asset?.optString("name", "") ?: ""
+                            if (name.endsWith(".apk")) {
+                                // 通过镜像加速 GitHub 下载
+                                downloadUrl = "https://ghcr.nju.edu.cn/" + asset.optString("browser_download_url")
+                                break
+                            }
                         }
                     }
+                    val hasUpdate = compareVersions(tagName, currentVersion) > 0
+                    return@withContext if (hasUpdate) {
+                        UpdateResult(true, tagName, downloadUrl, "发现新版本 v$tagName")
+                    } else {
+                        UpdateResult(false, tagName, null, "当前已是最新版本")
+                    }
                 }
-                val hasUpdate = compareVersions(tagName, currentVersion) > 0
-                if (hasUpdate) {
-                    UpdateResult(true, tagName, downloadUrl, "发现新版本 v$tagName")
-                } else {
-                    UpdateResult(false, tagName, null, "当前已是最新版本")
-                }
+            } catch (e: Exception) {
+                lastError = "检查更新失败：${e.message}"
             }
-        } catch (e: Exception) {
-            UpdateResult(false, currentVersion, null, "检查更新失败：${e.message}，挂梯子试试")
         }
+        UpdateResult(false, currentVersion, null, "$lastError，挂梯子试试")
     }
 
     /** 下载 APK 到缓存目录，onProgress 回调进度 (0-100) */

@@ -62,6 +62,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -163,13 +164,14 @@ private fun CommunityContent(
 ) {
     val focusManager = LocalFocusManager.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var showSearchBar by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(ForumColors.Page)
     ) {
-        // 顶部品牌栏与搜索框
+        // 顶部品牌栏与搜索图标
         Surface(
             color = ForumColors.Surface,
             modifier = Modifier.fillMaxWidth()
@@ -197,22 +199,47 @@ private fun CommunityContent(
                             color = ForumColors.Meta
                         )
                     }
-                    BadgePill(
-                        text = "${state.favoriteFids.size} 收藏",
-                        containerColor = ForumColors.AccentSoft,
-                        contentColor = ForumColors.Accent,
-                        icon = Icons.Default.Explore
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        BadgePill(
+                            text = "${state.favoriteFids.size} 收藏",
+                            containerColor = ForumColors.AccentSoft,
+                            contentColor = ForumColors.Accent,
+                            icon = Icons.Default.Explore
+                        )
+                        IconButton(
+                            onClick = {
+                                showSearchBar = !showSearchBar
+                                if (!showSearchBar) {
+                                    onQueryChange("")
+                                    focusManager.clearFocus()
+                                }
+                            },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (showSearchBar) Icons.Default.Clear else Icons.Default.Search,
+                                contentDescription = if (showSearchBar) "关闭搜索" else "搜索板块",
+                                tint = if (showSearchBar) ForumColors.Accent else ForumColors.TextSecondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                 }
 
-                Spacer(Modifier.height(12.dp))
-
-                // 现代胶囊搜索栏
-                CommunitySearchBar(
-                    query = state.query,
-                    onQueryChange = onQueryChange,
-                    onSearchAction = { focusManager.clearFocus() }
-                )
+                // 可折叠搜索栏
+                AnimatedVisibility(visible = showSearchBar) {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        CommunitySearchBar(
+                            query = state.query,
+                            onQueryChange = onQueryChange,
+                            onSearchAction = { focusManager.clearFocus() }
+                        )
+                    }
+                }
             }
         }
 
@@ -237,14 +264,6 @@ private fun CommunityContent(
                 )
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    // 最近常逛条（如果有记录）
-                    AnimatedVisibility(visible = state.recentForums.isNotEmpty()) {
-                        RecentForumsStrip(
-                            forums = state.recentForums,
-                            onForumClick = onForumClick
-                        )
-                    }
-
                     // 现代双栏板块浏览：左侧分类导航轨 + 右侧板块卡片流
                     Row(
                         modifier = Modifier

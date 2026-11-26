@@ -51,9 +51,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Html
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -117,7 +115,6 @@ import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.ContentNode
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.ExportManager
-import com.ngalite.app.data.HtmlShareConfig
 import com.ngalite.app.data.NgaApi
 import com.ngalite.app.data.NgaParser
 import com.ngalite.app.data.Post
@@ -385,58 +382,6 @@ class DetailViewModel : ViewModel() {
         return text
     }
 
-    fun exportHtml(context: Context, onResult: (Boolean, String) -> Unit) {
-        val content = exportContent()
-        if (content == null) {
-            onResult(false, "内容未加载完成")
-            return
-        }
-        viewModelScope.launch {
-            try {
-                val cookie = CookieStore.get()
-                val html = ExportManager.buildExportHtml(context, content)
-                val inlined = ExportManager.inlineImagesInHtml(html, cookie)
-                val name = ExportManager.buildFileName(content.title, "html")
-                val location = withContext(Dispatchers.IO) {
-                    ExportManager.saveHtmlToDownloads(context, name, inlined)
-                }
-                onResult(true, "HTML 已保存到 $location")
-            } catch (e: Exception) {
-                onResult(false, "HTML 导出失败: ${e.message}")
-            }
-        }
-    }
-
-    fun exportShareLink(context: Context, onResult: (Boolean, String) -> Unit) {
-        val content = exportContent()
-        if (content == null) {
-            onResult(false, "内容未加载完成")
-            return
-        }
-        viewModelScope.launch {
-            try {
-                val cookie = CookieStore.get()
-                val link = when (HtmlShareConfig.provider()) {
-                    HtmlShareConfig.Provider.PAD -> {
-                        val html = ExportManager.buildExportHtml(context, content)
-                        val inlined = ExportManager.inlineImagesInHtml(html, cookie)
-                        ExportManager.uploadHtmlToPad(inlined)
-                    }
-                    HtmlShareConfig.Provider.HTMLTO -> {
-                        val markdown = ExportManager.convertToMarkdown(content)
-                        ExportManager.uploadMarkdownToHtmltoLink(content.title, markdown)
-                    }
-                }
-                val shareText = if (content.title.isBlank()) link else "${content.title} $link"
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", shareText))
-                onResult(true, shareText)
-            } catch (e: Exception) {
-                onResult(false, "分享失败: ${e.message}")
-            }
-        }
-    }
-
     fun exportImage(context: Context, onResult: (Boolean, String) -> Unit) {
         val content = exportContent(maxComments = IMAGE_MAX_COMMENTS)
         if (content == null) {
@@ -511,7 +456,6 @@ fun DetailScreen(
     val context = LocalContext.current
     var showExportSheet by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
-    var shareText by remember { mutableStateOf<String?>(null) }
     var fullScreenState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
     var showJumpDialog by remember { mutableStateOf(false) }
 
@@ -706,15 +650,6 @@ fun DetailScreen(
                     showExportSheet = false
                 }
             },
-            onExportHtml = {
-                if (!ensureStoragePermission()) return@ExportBottomSheet
-                isExporting = true
-                vm.exportHtml(context) { success, msg ->
-                    isExporting = false
-                    toast(msg)
-                    if (success) showExportSheet = false
-                }
-            },
             onExportImage = {
                 if (!ensureStoragePermission()) return@ExportBottomSheet
                 isExporting = true
@@ -722,18 +657,6 @@ fun DetailScreen(
                     isExporting = false
                     toast(msg)
                     if (success) showExportSheet = false
-                }
-            },
-            onExportShareLink = {
-                isExporting = true
-                vm.exportShareLink(context) { success, msg ->
-                    isExporting = false
-                    if (success) {
-                        shareText = msg
-                        showExportSheet = false
-                    } else {
-                        toast(msg)
-                    }
                 }
             }
         )
@@ -748,10 +671,6 @@ fun DetailScreen(
                 vm.jumpToPage(page)
             }
         )
-    }
-
-    shareText?.let { text ->
-        ShareLinkDialog(shareText = text, onDismiss = { shareText = null })
     }
 
     fullScreenState?.let { (images, index) ->
@@ -1588,9 +1507,7 @@ private fun ExportBottomSheet(
     onDismiss: () -> Unit,
     isExporting: Boolean,
     onCopyText: () -> Unit,
-    onExportHtml: () -> Unit,
     onExportImage: () -> Unit,
-    onExportShareLink: () -> Unit,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1604,14 +1521,14 @@ private fun ExportBottomSheet(
                 .padding(bottom = 28.dp)
         ) {
             Text(
-                text = "分享与导出",
+                text = "导出",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = ForumColors.TextPrimary
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "选择需要将当前帖子导出或分享的形式",
+                text = "选择需要将当前帖子导出的形式",
                 style = MaterialTheme.typography.bodySmall,
                 color = ForumColors.Meta
             )
@@ -1622,12 +1539,12 @@ private fun ExportBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ExportGridTile(
-                    icon = Icons.Default.Link,
-                    title = "分享链接",
-                    subtitle = "上传生成链接",
-                    tint = ForumColors.Accent,
+                    icon = Icons.Default.Image,
+                    title = "生成长图",
+                    subtitle = "保存图片到相册",
+                    tint = Color(0xFF7C3AED),
                     enabled = !isExporting,
-                    onClick = onExportShareLink,
+                    onClick = onExportImage,
                     modifier = Modifier.weight(1f)
                 )
                 ExportGridTile(
@@ -1637,30 +1554,6 @@ private fun ExportBottomSheet(
                     tint = ForumColors.Link,
                     enabled = !isExporting,
                     onClick = onCopyText,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ExportGridTile(
-                    icon = Icons.Default.Html,
-                    title = "导出 HTML",
-                    subtitle = "保存到下载目录",
-                    tint = Color(0xFF0D9488),
-                    enabled = !isExporting,
-                    onClick = onExportHtml,
-                    modifier = Modifier.weight(1f)
-                )
-                ExportGridTile(
-                    icon = Icons.Default.Image,
-                    title = "生成长图",
-                    subtitle = "保存图片到相册",
-                    tint = Color(0xFF7C3AED),
-                    enabled = !isExporting,
-                    onClick = onExportImage,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1735,43 +1628,4 @@ private fun ExportGridTile(
             }
         }
     }
-}
-
-@Composable
-private fun ShareLinkDialog(shareText: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("分享链接已生成") },
-        text = {
-            Column {
-                Text(
-                    text = "已自动复制到剪贴板：",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ForumColors.Meta,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = shareText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ForumColors.Link,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(ForumColors.SurfaceMuted)
-                        .padding(12.dp),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NGA帖子链接", shareText))
-                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
-            }) { Text("再次复制", fontWeight = FontWeight.SemiBold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
-        },
-    )
 }

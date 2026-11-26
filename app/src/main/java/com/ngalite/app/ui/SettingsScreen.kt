@@ -33,9 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatSize
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Update
@@ -74,7 +72,6 @@ import com.ngalite.app.data.AppearanceStore
 import com.ngalite.app.data.BaseConfig
 import com.ngalite.app.data.CookieStore
 import com.ngalite.app.data.FontScale
-import com.ngalite.app.data.HtmlShareConfig
 import com.ngalite.app.data.ThemeMode
 import com.ngalite.app.data.UpdateManager
 import kotlinx.coroutines.launch
@@ -98,12 +95,6 @@ fun SettingsScreen(
 
     var baseDomain by remember { mutableStateOf(BaseConfig.domain()) }
     var showDomainDialog by remember { mutableStateOf(false) }
-
-    var shareProvider by remember { mutableStateOf(HtmlShareConfig.provider()) }
-    var showShareProviderDialog by remember { mutableStateOf(false) }
-    var htmltoCookie by remember { mutableStateOf(HtmlShareConfig.htmltoCookie()) }
-    var showHtmltoCookieDialog by remember { mutableStateOf(false) }
-    var htmltoCookieInput by remember { mutableStateOf(htmltoCookie) }
 
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateManager.UpdateResult?>(null) }
@@ -178,11 +169,6 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold,
                     color = ForumColors.TextPrimary
                 )
-                Text(
-                    text = "账号、阅读外观与偏好配置",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ForumColors.Meta
-                )
             }
         }
         HorizontalDivider(color = ForumColors.Divider, thickness = 1.dp)
@@ -211,18 +197,11 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SettingsIconBadge(icon = Icons.Default.DarkMode, tint = ForumColors.Accent)
                         Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "主题模式",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = ForumColors.TextPrimary
-                            )
-                            Text(
-                                text = "支持深浅色切换或跟随系统",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ForumColors.Meta
-                            )
-                        }
+                        Text(
+                            text = "主题模式",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ForumColors.TextPrimary
+                        )
                     }
                     Spacer(Modifier.height(10.dp))
                     SegmentedSelectorRow(
@@ -239,18 +218,11 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SettingsIconBadge(icon = Icons.Default.FormatSize, tint = ForumColors.Link)
                         Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "阅读字号",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = ForumColors.TextPrimary
-                            )
-                            Text(
-                                text = "调整帖子标题与正文排版尺寸",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ForumColors.Meta
-                            )
-                        }
+                        Text(
+                            text = "阅读字号",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ForumColors.TextPrimary
+                        )
                     }
                     Spacer(Modifier.height(10.dp))
                     SegmentedSelectorRow(
@@ -269,7 +241,7 @@ fun SettingsScreen(
                     icon = Icons.Default.Language,
                     iconTint = ForumColors.Link,
                     title = "服务器域名",
-                    subtitle = "https://$baseDomain · 切换后需重新登录",
+                    subtitle = "https://$baseDomain",
                     onClick = { showDomainDialog = true }
                 )
                 SettingsDivider()
@@ -288,29 +260,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-                )
-            }
-
-            // HTML 分享
-            SettingsSectionHeader("分享与导出")
-            SettingsGroupCard {
-                SettingsRow(
-                    icon = Icons.Default.Link,
-                    iconTint = Color(0xFF0D9488),
-                    title = "HTML 分享服务",
-                    subtitle = shareProvider.displayName,
-                    onClick = { showShareProviderDialog = true }
-                )
-                SettingsDivider()
-                SettingsRow(
-                    icon = Icons.Default.Key,
-                    iconTint = Color(0xFF7C3AED),
-                    title = "htmlto.link Cookie",
-                    subtitle = if (htmltoCookie.isBlank())
-                        "可选 · 配置后有效期由 1 天提升至 3 天"
-                    else
-                        "已配置 · 分享链接有效期 3 天",
-                    onClick = { showHtmltoCookieDialog = true }
                 )
             }
 
@@ -370,7 +319,6 @@ fun SettingsScreen(
     if (showDomainDialog) {
         SingleChoiceDialog(
             title = "选择服务器域名",
-            subtitle = "不同域名间 Cookie 不互通，切换后需重新登录",
             options = BaseConfig.DOMAINS,
             selected = baseDomain,
             labelOf = { "https://$it" },
@@ -384,24 +332,6 @@ fun SettingsScreen(
                 showDomainDialog = false
             },
             onDismiss = { showDomainDialog = false }
-        )
-    }
-
-    if (showShareProviderDialog) {
-        SingleChoiceDialog(
-            title = "选择分享服务",
-            subtitle = "用于生成在线可访问的帖子分享链接",
-            options = HtmlShareConfig.Provider.entries,
-            selected = shareProvider,
-            labelOf = { it.displayName },
-            onSelect = { provider ->
-                if (provider != shareProvider) {
-                    shareProvider = provider
-                    HtmlShareConfig.setProvider(provider)
-                }
-                showShareProviderDialog = false
-            },
-            onDismiss = { showShareProviderDialog = false }
         )
     }
 
@@ -438,43 +368,6 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCookieDialog = false }) { Text("取消") }
-            }
-        )
-    }
-
-    if (showHtmltoCookieDialog) {
-        AlertDialog(
-            onDismissRequest = { showHtmltoCookieDialog = false },
-            shape = RoundedCornerShape(20.dp),
-            title = { Text("htmlto.link Cookie") },
-            text = {
-                Column {
-                    Text(
-                        text = "可选配置。粘贴 htmlto.link 网站的 Cookie 后，生成的分享链接有效期由 1 天提升至 3 天。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ForumColors.Meta
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = htmltoCookieInput,
-                        onValueChange = { htmltoCookieInput = it },
-                        label = { Text("Cookie 字符串") },
-                        singleLine = false,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    HtmlShareConfig.setHtmltoCookie(htmltoCookieInput)
-                    htmltoCookie = HtmlShareConfig.htmltoCookie()
-                    showHtmltoCookieDialog = false
-                }) { Text("保存", fontWeight = FontWeight.SemiBold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showHtmltoCookieDialog = false }) { Text("取消") }
             }
         )
     }
@@ -625,11 +518,6 @@ private fun AccountHeroCard(
                         )
                     }
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "可访问需要权限的隐藏与登录板块",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ForumColors.Meta
-                    )
                 }
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(
@@ -653,7 +541,6 @@ private fun AccountHeroCard(
                 icon = Icons.AutoMirrored.Filled.Login,
                 iconTint = ForumColors.Accent,
                 title = "账号密码登录",
-                subtitle = "使用用户名 / 邮箱 / 手机号安全登录",
                 onClick = onLoginPassword
             )
             SettingsDivider()
@@ -661,7 +548,6 @@ private fun AccountHeroCard(
                 icon = Icons.Default.Public,
                 iconTint = ForumColors.Link,
                 title = "网页快捷登录",
-                subtitle = "在内置网页完成验证后自动同步 Cookie",
                 onClick = onLoginWeb
             )
             SettingsDivider()
@@ -669,7 +555,6 @@ private fun AccountHeroCard(
                 icon = Icons.Default.ContentPaste,
                 iconTint = Color(0xFF0D9488),
                 title = "粘贴 Cookie 登录",
-                subtitle = "直接导入浏览器中获取的 Cookie 字符串",
                 onClick = onPasteCookie
             )
         }
@@ -730,7 +615,7 @@ private fun <T> SegmentedSelectorRow(
 @Composable
 private fun <T> SingleChoiceDialog(
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     options: List<T>,
     selected: T,
     labelOf: (T) -> String,
@@ -743,12 +628,14 @@ private fun <T> SingleChoiceDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ForumColors.Meta
-                )
-                Spacer(Modifier.height(6.dp))
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ForumColors.Meta
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 options.forEach { option ->
                     val isSelected = option == selected
                     Surface(
@@ -848,7 +735,7 @@ private fun SettingsRow(
     icon: ImageVector,
     iconTint: Color,
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     onClick: () -> Unit,
     trailing: @Composable (() -> Unit)? = null
 ) {
@@ -867,12 +754,14 @@ private fun SettingsRow(
                 style = MaterialTheme.typography.titleSmall,
                 color = ForumColors.TextPrimary
             )
-            Spacer(Modifier.height(1.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = ForumColors.Meta
-            )
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ForumColors.Meta
+                )
+            }
         }
         if (trailing != null) {
             trailing()
